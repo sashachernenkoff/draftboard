@@ -434,22 +434,9 @@
   }
   .cell.filled[draggable="true"]{ cursor:grab; }
   .cell.filled[draggable="true"]:active{ cursor:grabbing; }
-  .cell.filled{ transition: transform 0.12s ease; }
   .cell.drag-src{ opacity:.35; }
-  .cell.push-next{ transform: translateX(7px); }
-
-  .drop-line{
-    position:fixed;
-    width:2px;
-    transform:translateX(-50%);
-    border-radius:2px;
-    background:var(--accent);
-    box-shadow:0 0 10px 4px var(--accent);
-    pointer-events:none;
-    display:none;
-    z-index:999;
-  }
-  .drop-line.active{ display:block; }
+  .cell.drop-before{ box-shadow: -2px 0 0 var(--accent) !important; }
+  .cell.drop-after { box-shadow:  2px 0 0 var(--accent) !important; }
 
   /* ---------- context menu ---------- */
   .ctx-menu{
@@ -652,7 +639,6 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
   <div class="ctx-item ctx-danger" id="ctxReturn">Return to pool</div>
 </div>
 
-<div class="drop-line" id="dropLine"></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -961,13 +947,15 @@ function reorderPickInsertBefore(from, insertBefore){
     boardTable.innerHTML = html;
 
     // wire up cell interactions (click to blackout, drag-and-drop to reorder)
-    const dropLine = document.getElementById("dropLine");
     let dragFrom = null;
     let dragInsertBefore = null;
+    let boardDragTarget = null;
 
-    function clearDragUI(){
-      dropLine.classList.remove("active");
-      boardTable.querySelectorAll(".push-next").forEach(c=>c.classList.remove("push-next"));
+    function clearBoardDragUI(){
+      if(boardDragTarget){
+        boardDragTarget.classList.remove("drop-before","drop-after");
+        boardDragTarget = null;
+      }
     }
 
     boardTable.querySelectorAll(".cell.filled").forEach(el=>{
@@ -983,7 +971,7 @@ function reorderPickInsertBefore(from, insertBefore){
 
       el.addEventListener("dragend", ()=>{
         el.classList.remove("drag-src");
-        clearDragUI();
+        clearBoardDragUI();
         dragFrom = null;
         dragInsertBefore = null;
       });
@@ -998,25 +986,17 @@ function reorderPickInsertBefore(from, insertBefore){
         const cellIdx = parseInt(el.dataset.pickIdx, 10);
         dragInsertBefore = isLeftHalf ? cellIdx : cellIdx + 1;
 
-        // position drop line in the gap between cells
-        const lineX = isLeftHalf ? rect.left - 2.5 : rect.right + 2.5;
-        dropLine.style.left   = lineX + "px";
-        dropLine.style.top    = rect.top + "px";
-        dropLine.style.height = rect.height + "px";
-        dropLine.classList.add("active");
-
-        // push the cell that will shift to make room
-        boardTable.querySelectorAll(".push-next").forEach(c=>c.classList.remove("push-next"));
-        const pushIdx = dragInsertBefore;
-        if(pushIdx !== dragFrom && pushIdx !== dragFrom + 1){
-          const pushCell = boardTable.querySelector(`.cell[data-pick-idx="${pushIdx}"]`);
-          if(pushCell) pushCell.classList.add("push-next");
+        if(boardDragTarget && boardDragTarget !== el){
+          boardDragTarget.classList.remove("drop-before","drop-after");
         }
+        boardDragTarget = el;
+        el.classList.toggle("drop-before", isLeftHalf);
+        el.classList.toggle("drop-after", !isLeftHalf);
       });
 
       el.addEventListener("drop", (e)=>{
         e.preventDefault();
-        clearDragUI();
+        clearBoardDragUI();
         if(dragFrom !== null && dragInsertBefore !== null &&
            dragInsertBefore !== dragFrom && dragInsertBefore !== dragFrom + 1){
           reorderPickInsertBefore(dragFrom, dragInsertBefore);
