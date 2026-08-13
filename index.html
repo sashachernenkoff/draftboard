@@ -434,12 +434,12 @@
   }
   .cell.filled[draggable="true"]{ cursor:grab; }
   .cell.filled[draggable="true"]:active{ cursor:grabbing; }
-  .cell.filled{ transition: transform 0.12s ease; }
+  .cell.filled{ transition: transform 0.12s ease, border-color 0.12s ease; }
   .cell.drag-src{ opacity:.35; }
   .cell.drop-before{ box-shadow: -2px 0 0 var(--accent) !important; }
   .cell.drop-after { box-shadow:  2px 0 0 var(--accent) !important; }
-  .cell.push-prev{ transform: translateX(-5px); }
-  .cell.push-next{ transform: translateX(5px); }
+  .cell.push-prev{ transform: translateX(-4px); border-color: var(--accent) !important; }
+  .cell.push-next{ transform: translateX(4px);  border-color: var(--accent) !important; }
 
   /* ---------- context menu ---------- */
   .ctx-menu{
