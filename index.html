@@ -942,6 +942,13 @@ Justin Jefferson, WR, MIN, 6"></textarea>
         }
       });
 
+      el.addEventListener("contextmenu", (e)=>{
+        e.preventDefault();
+        e.stopPropagation();
+        const pick = state.picks[parseInt(el.dataset.pickIdx, 10)];
+        if(pick) openCtxMenu(e.clientX, e.clientY, pick.playerId, 'board');
+      });
+
       el.addEventListener("click", (e)=>{
         if(e.ctrlKey || dragFrom !== null) return;
         toggleBlackout(parseInt(el.dataset.pickIdx, 10));
@@ -1063,22 +1070,23 @@ Justin Jefferson, WR, MIN, 6"></textarea>
   const ctxDnd  = document.getElementById("ctxDnd");
   const ctxRemove = document.getElementById("ctxRemove");
   let ctxPlayerId = null;
-
+  let ctxContext  = 'pool'; // 'pool' | 'board'
   let ctxJustOpened = false;
 
-  function openCtxMenu(x, y, playerId){
+  function openCtxMenu(x, y, playerId, context){
     ctxPlayerId = playerId;
+    ctxContext  = context || 'pool';
     const isTarget = !!state.targets[playerId];
     const isDnd    = !!state.dnds[playerId];
-    ctxStar.textContent = isTarget ? "★ Remove target" : "★ Add target";
-    ctxDnd.textContent  = isDnd    ? "✕ Remove do-not-draft" : "✕ Do not draft";
+    ctxStar.textContent   = isTarget ? "★ Remove target"       : "★ Add target";
+    ctxDnd.textContent    = isDnd    ? "✕ Remove do-not-draft"  : "✕ Do not draft";
+    ctxRemove.textContent = ctxContext === 'board' ? "Return to pool" : "Remove player";
 
     ctxMenu.style.left = x + "px";
     ctxMenu.style.top  = y + "px";
     ctxMenu.classList.add("open");
-    ctxJustOpened = true;   // guard against the click event that follows contextmenu on Mac
+    ctxJustOpened = true;
 
-    // keep menu within viewport
     requestAnimationFrame(()=>{
       const r = ctxMenu.getBoundingClientRect();
       if(r.right  > window.innerWidth)  ctxMenu.style.left = (x - r.width)  + "px";
@@ -1099,14 +1107,24 @@ Justin Jefferson, WR, MIN, 6"></textarea>
   ctxRemove.addEventListener("click", ()=>{
     if(!ctxPlayerId){ closeCtxMenu(); return; }
     const id = ctxPlayerId;
-    state.players = state.players.filter(p=>p.id!==id);
-    state.picks   = state.picks.filter(p=>p.playerId!==id);
-    delete state.targets[id];
-    delete state.dnds[id];
-    saveState();
-    renderAll();
-    closeCtxMenu();
-    showToast("Player removed");
+    if(ctxContext === 'board'){
+      // un-draft: remove only the pick, player returns to pool
+      state.picks = state.picks.filter(p=>p.playerId!==id);
+      saveState();
+      renderAll();
+      closeCtxMenu();
+      showToast("Player returned to pool");
+    } else {
+      // pool: remove player from the list entirely
+      state.players = state.players.filter(p=>p.id!==id);
+      state.picks   = state.picks.filter(p=>p.playerId!==id);
+      delete state.targets[id];
+      delete state.dnds[id];
+      saveState();
+      renderAll();
+      closeCtxMenu();
+      showToast("Player removed");
+    }
   });
 
   document.addEventListener("click", (e)=>{
