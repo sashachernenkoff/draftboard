@@ -625,10 +625,10 @@
 <div class="modal-backdrop" id="pasteModal">
   <div class="modal">
     <h2>Paste your player list</h2>
-    <p>One player per line, in rank order. Format: <code>Name, Position, Team, Bye</code> — the team and bye are optional. Example: <code>Ja'Marr Chase, WR, CIN, 6</code></p>
-    <textarea id="pasteArea" placeholder="Ja'Marr Chase, WR, CIN, 6
+    <p>One player per line, in rank order. Format: <code>Name, Position, Team, Bye, Target, DND</code> — team, bye, target, and DND are optional. Use <code>1</code> to pre-flag a player; if both target and DND are set, DND wins.</p>
+    <textarea id="pasteArea" placeholder="Ja'Marr Chase, WR, CIN, 6, 1, 0
 Bijan Robinson, RB, ATL, 11
-Justin Jefferson, WR, MIN, 6"></textarea>
+Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
     <div class="modal-actions">
       <button class="ghost" id="pasteCancel">Cancel</button>
       <button class="primary" id="pasteApply">Load list</button>
@@ -1008,15 +1008,18 @@ Justin Jefferson, WR, MIN, 6"></textarea>
     lines.forEach((line, i)=>{
       const parts = line.split(",").map(s=>s.trim().replace(/^"|"$/g,""));
       if(parts.length < 1) return;
-      const [name, pos, team, bye] = parts;
+      const [name, pos, team, bye, targetCol, dndCol] = parts;
       if(i===0 && /^name$/i.test(name)) return; // skip header row
       if(!name) return;
       let normPos = (pos||"FA").toUpperCase();
       if(!POS_STYLE[normPos]) normPos = normPos.replace(/^DST$|^D\/ST$/,"DEF");
       if(!POS_STYLE[normPos]) normPos = "FA";
+      const isDnd    = dndCol    === "1";
+      const isTarget = targetCol === "1" && !isDnd; // dnd wins if both set
       out.push({
         id: "p" + Date.now() + "_" + i + "_" + Math.floor(Math.random()*10000),
-        name, pos: normPos, team: team||"", bye: bye||""
+        name, pos: normPos, team: team||"", bye: bye||"",
+        target: isTarget, dnd: isDnd
       });
     });
     return out;
@@ -1028,6 +1031,10 @@ Justin Jefferson, WR, MIN, 6"></textarea>
     state.picks = [];
     state.targets = {};
     state.dnds = {};
+    players.forEach(p=>{
+      if(p.target) state.targets[p.id] = true;
+      if(p.dnd)    state.dnds[p.id]    = true;
+    });
     saveState();
     renderAll();
     showToast("Loaded " + players.length + " players");
