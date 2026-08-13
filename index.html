@@ -993,12 +993,16 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
   function escapeAttr(s){ return escapeHtml(s); }
 
   let toastTimer = null;
-  function showToast(msg){
+  function showToast(msg, duration=1800){
     const t = document.getElementById("toast");
     t.textContent = msg;
     t.classList.add("show");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(()=> t.classList.remove("show"), 1800);
+    if(duration > 0) toastTimer = setTimeout(()=> t.classList.remove("show"), duration);
+  }
+  function hideToast(){
+    clearTimeout(toastTimer);
+    document.getElementById("toast").classList.remove("show");
   }
 
   // ---- CSV / paste import ----
@@ -1011,18 +1015,99 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
       const [name, pos, team, bye, targetCol, dndCol] = parts;
       if(i===0 && /^name$/i.test(name)) return; // skip header row
       if(!name) return;
-      let normPos = (pos||"FA").toUpperCase();
+      const rawPos  = (pos  || "").trim();
+      const rawTeam = (team || "").trim();
+      const rawBye  = (bye  || "").trim();
+      let normPos = rawPos.toUpperCase() || "FA";
       if(!POS_STYLE[normPos]) normPos = normPos.replace(/^DST$|^D\/ST$/,"DEF");
       if(!POS_STYLE[normPos]) normPos = "FA";
+      const _hasPos  = !!rawPos && normPos !== "FA";
+      const _hasTeam = !!rawTeam;
+      const _hasBye  = !!rawBye;
       const isDnd    = dndCol    === "1";
-      const isTarget = targetCol === "1" && !isDnd; // dnd wins if both set
+      const isTarget = targetCol === "1" && !isDnd;
       out.push({
         id: "p" + Date.now() + "_" + i + "_" + Math.floor(Math.random()*10000),
-        name, pos: normPos, team: team||"", bye: bye||"",
-        target: isTarget, dnd: isDnd
+        name, pos: normPos, team: rawTeam, bye: rawBye,
+        target: isTarget, dnd: isDnd,
+        _hasPos, _hasTeam, _hasBye,
+        _need: !_hasPos || !_hasTeam || !_hasBye
       });
     });
     return out;
+  }
+
+  // ---- Sleeper enrichment ----
+  function sleeperNorm(s){
+    return (s||"").toLowerCase().replace(/[.']/g,"").replace(/\s+/g," ").trim();
+  }
+
+  async function getSleeperMap(){
+    const KEY = "fftracker_sleeper_v1", TTL = 86400000;
+    try {
+      const cached = localStorage.getItem(KEY);
+      if(cached){
+        const {ts, map} = JSON.parse(cached);
+        if(Date.now() - ts < TTL) return map;
+      }
+      showToast("Fetching player data…", 0);
+      const resp = await fetch("https://api.sleeper.app/v1/players/nfl");
+      if(!resp.ok) throw new Error();
+      const raw = await resp.json();
+      const KEEP = new Set(["QB","RB","WR","TE","K","DEF"]);
+      const map = {};
+      Object.values(raw).forEach(p=>{
+        if(!KEEP.has(p.position)) return;
+        const key = sleeperNorm(p.full_name);
+        if(!key) return;
+        map[key] = { pos: p.position, team: p.team||"", bye: p.bye_week != null ? String(p.bye_week) : "" };
+      });
+      localStorage.setItem(KEY, JSON.stringify({ts: Date.now(), map}));
+      return map;
+    } catch(e){ return null; }
+  }
+
+  function sleeperLookup(name, map){
+    const key = sleeperNorm(name);
+    if(map[key]) return map[key];
+    // strip common suffixes (Jr., Sr., II, III, IV)
+    const stripped = key.replace(/\s+(jr|sr|ii|iii|iv)\.?$/,"").trim();
+    if(map[stripped]) return map[stripped];
+    // all significant words present
+    const words = key.split(" ").filter(w=>w.length > 2);
+    if(words.length >= 2){
+      for(const [k,v] of Object.entries(map)){
+        if(words.every(w=>k.includes(w))) return v;
+      }
+    }
+    return null;
+  }
+
+  async function enrichPlayers(players){
+    if(!players.some(p=>p._need)){
+      players.forEach(p=>{ delete p._need; delete p._hasPos; delete p._hasTeam; delete p._hasBye; });
+      return;
+    }
+    const map = await getSleeperMap();
+    hideToast();
+    const failed = [];
+    players.forEach(p=>{
+      if(p._need){
+        const m = map ? sleeperLookup(p.name, map) : null;
+        if(m){
+          if(!p._hasPos)  p.pos  = m.pos;
+          if(!p._hasTeam) p.team = m.team;
+          if(!p._hasBye)  p.bye  = m.bye;
+        } else if(map) {
+          failed.push(p.name);
+        }
+      }
+      delete p._need; delete p._hasPos; delete p._hasTeam; delete p._hasBye;
+    });
+    if(failed.length){
+      const preview = failed.slice(0,3).join(", ") + (failed.length > 3 ? ` +${failed.length-3} more` : "");
+      showToast("Couldn't find: " + preview, 5000);
+    }
   }
 
   function loadNewPlayerList(players){
@@ -1044,7 +1129,11 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
     const file = e.target.files[0];
     if(!file) return;
     const reader = new FileReader();
-    reader.onload = ()=> loadNewPlayerList(parsePlayerLines(reader.result));
+    reader.onload = async ()=>{
+      const players = parsePlayerLines(reader.result);
+      await enrichPlayers(players);
+      loadNewPlayerList(players);
+    };
     reader.readAsText(file);
     e.target.value = "";
   });
@@ -1052,10 +1141,11 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
   const pasteModal = document.getElementById("pasteModal");
   document.getElementById("pasteBtn").addEventListener("click", ()=> pasteModal.classList.add("open"));
   document.getElementById("pasteCancel").addEventListener("click", ()=> pasteModal.classList.remove("open"));
-  document.getElementById("pasteApply").addEventListener("click", ()=>{
+  document.getElementById("pasteApply").addEventListener("click", async ()=>{
     const text = document.getElementById("pasteArea").value;
     const players = parsePlayerLines(text);
     if(players.length){
+      await enrichPlayers(players);
       loadNewPlayerList(players);
       pasteModal.classList.remove("open");
       document.getElementById("pasteArea").value = "";
