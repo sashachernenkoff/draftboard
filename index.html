@@ -663,31 +663,17 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
     FA:  {fill:"var(--fa-fill)",  ink:"var(--fa-ink)"}
   };
 
-  const SAMPLE_PLAYERS = [
-    ["Ja'Marr Chase","WR","CIN","6"], ["Bijan Robinson","RB","ATL","11"],
-    ["Justin Jefferson","WR","MIN","6"], ["Jahmyr Gibbs","RB","DET","6"],
-    ["CeeDee Lamb","WR","DAL","14"], ["Puka Nacua","WR","LAR","11"],
-    ["Malik Nabers","WR","NYG","8"], ["Ashton Jeanty","RB","LV","13"],
-    ["Josh Allen","QB","BUF","7"], ["Saquon Barkley","RB","PHI","10"],
-    ["Amon-Ra St. Brown","WR","DET","6"], ["Brock Bowers","TE","LV","13"],
-    ["Christian McCaffrey","RB","SF","8"], ["Jonathan Taylor","RB","IND","13"],
-    ["Nico Collins","WR","HOU","8"], ["Derrick Henry","RB","BAL","13"],
-    ["Drake London","WR","ATL","11"], ["A.J. Brown","WR","NE","11"],
-    ["Trey McBride","TE","ARI","14"], ["Lamar Jackson","QB","BAL","13"]
-  ];
-
   let state = loadState();
 
   function defaultState(){
     return {
       rounds: 16,
-      players: SAMPLE_PLAYERS.map((p,i)=>({
-        id: "p"+i, name:p[0], pos:p[1], team:p[2], bye:p[3]
-      })),
-      picks: [],          // { playerId, blacked }
-      targets: {},         // id -> true
-      dnds: {},             // id -> true
-      teamNames: Array.from({length:TEAMS}, (_,i)=>"Team "+(i+1))
+      players: [],
+      picks: [],
+      targets: {},
+      dnds: {},
+      teamNames: Array.from({length:TEAMS}, (_,i)=>"Team "+(i+1)),
+      isDefaultList: true
     };
   }
 
@@ -697,6 +683,7 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
       if(!raw) return defaultState();
       const parsed = JSON.parse(raw);
       if(!parsed.players || !parsed.teamNames) return defaultState();
+      if(parsed.isDefaultList === undefined) parsed.isDefaultList = false; // existing custom list
       return parsed;
     }catch(e){ return defaultState(); }
   }
@@ -741,15 +728,24 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
     if(activePos !== "ALL") list = list.filter(p=>p.pos===activePos);
     if(q) list = list.filter(p=> p.name.toLowerCase().includes(q));
 
-    poolCount.textContent = availablePlayers().length + " players available" + (list.length!==availablePlayers().length ? " · " + list.length + " shown" : "");
+    const avail = availablePlayers();
+    if(state.isDefaultList && state.players.length === 0){
+      poolCount.textContent = "Loading players…";
+    } else {
+      poolCount.textContent = avail.length + " players available" + (list.length !== avail.length ? " · " + list.length + " shown" : "");
+    }
 
     poolList.innerHTML = "";
     if(list.length === 0){
       const empty = document.createElement("div");
       empty.className = "pool-empty";
-      empty.textContent = availablePlayers().length === 0
-        ? "Everyone's drafted. Import a new list or reset the draft."
-        : "No players match your search.";
+      if(state.isDefaultList && state.players.length === 0){
+        empty.textContent = "Loading players from Sleeper…";
+      } else if(avail.length === 0){
+        empty.textContent = "Everyone's drafted. Import a new list or reset the draft.";
+      } else {
+        empty.textContent = "No players match your search.";
+      }
       poolList.appendChild(empty);
       return;
     }
@@ -1038,42 +1034,77 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
   }
 
   // ---- Sleeper enrichment ----
+  // ---- Sleeper data (unified cache: pool + enrichment map) ----
+  const SLEEPER_KEY = "fftracker_sleeper_v2";
+  const SLEEPER_TTL = 86400000; // 24 h
+  const POS_ORDER   = {QB:1, RB:2, WR:3, TE:4, K:5, DEF:6};
+
   function sleeperNorm(s){
     return (s||"").toLowerCase().replace(/[.']/g,"").replace(/\s+/g," ").trim();
   }
 
-  async function getSleeperMap(){
-    const KEY = "fftracker_sleeper_v1", TTL = 86400000;
+  async function ensureSleeperCache(){
     try {
-      const cached = localStorage.getItem(KEY);
-      if(cached){
-        const {ts, map} = JSON.parse(cached);
-        if(Date.now() - ts < TTL) return map;
+      const raw = localStorage.getItem(SLEEPER_KEY);
+      if(raw){
+        const c = JSON.parse(raw);
+        if(Date.now() - c.ts < SLEEPER_TTL) return c;
       }
-      showToast("Fetching player data…", 0);
+      showToast("Fetching player data from Sleeper…", 0);
       const resp = await fetch("https://api.sleeper.app/v1/players/nfl");
       if(!resp.ok) throw new Error();
-      const raw = await resp.json();
+      const data = await resp.json();
+
       const KEEP = new Set(["QB","RB","WR","TE","K","DEF"]);
-      const map = {};
-      Object.values(raw).forEach(p=>{
-        if(!KEEP.has(p.position)) return;
-        const key = sleeperNorm(p.full_name);
-        if(!key) return;
-        map[key] = { pos: p.position, team: p.team||"", bye: p.bye_week != null ? String(p.bye_week) : "" };
+      const map = {}, poolRaw = [];
+
+      Object.entries(data).forEach(([pid, p])=>{
+        if(!KEEP.has(p.position) || !p.team) return;
+        let name = p.full_name;
+        if(!name){
+          if(p.position === "DEF") name = p.team + " DEF";
+          else return;
+        }
+        const bye  = p.bye_week != null ? String(p.bye_week) : "";
+        const team = p.team || "";
+        const pos  = p.position;
+        const mapKey = sleeperNorm(name);
+        if(!map[mapKey]) map[mapKey] = {pos, team, bye};
+        poolRaw.push({
+          id: "s_" + pid, name, pos, team, bye,
+          _sr: p.search_rank != null ? p.search_rank : 999999,
+          _po: POS_ORDER[pos] || 99
+        });
       });
-      localStorage.setItem(KEY, JSON.stringify({ts: Date.now(), map}));
-      return map;
+
+      // Sort by search_rank (Sleeper's popularity proxy), then position, then name
+      poolRaw.sort((a,b)=> a._sr !== b._sr ? a._sr - b._sr : a._po !== b._po ? a._po - b._po : a.name.localeCompare(b.name));
+      const pool = poolRaw.map(({_sr,_po,...p})=>p);
+
+      const cache = {ts: Date.now(), map, pool};
+      localStorage.setItem(SLEEPER_KEY, JSON.stringify(cache));
+      return cache;
     } catch(e){ return null; }
+  }
+
+  async function loadSleeperPool(){
+    const cache = await ensureSleeperCache();
+    hideToast();
+    if(!cache || !cache.pool.length){
+      showToast("Couldn't load player data — import a CSV to continue", 5000);
+      return;
+    }
+    if(!state.isDefaultList) return; // user imported a custom list, don't overwrite
+    state.players = cache.pool;
+    saveState();
+    renderAll();
   }
 
   function sleeperLookup(name, map){
     const key = sleeperNorm(name);
     if(map[key]) return map[key];
-    // strip common suffixes (Jr., Sr., II, III, IV)
     const stripped = key.replace(/\s+(jr|sr|ii|iii|iv)\.?$/,"").trim();
     if(map[stripped]) return map[stripped];
-    // all significant words present
     const words = key.split(" ").filter(w=>w.length > 2);
     if(words.length >= 2){
       for(const [k,v] of Object.entries(map)){
@@ -1088,8 +1119,9 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
       players.forEach(p=>{ delete p._need; delete p._hasPos; delete p._hasTeam; delete p._hasBye; });
       return;
     }
-    const map = await getSleeperMap();
+    const cache = await ensureSleeperCache();
     hideToast();
+    const map = cache ? cache.map : null;
     const failed = [];
     players.forEach(p=>{
       if(p._need){
@@ -1098,7 +1130,7 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
           if(!p._hasPos)  p.pos  = m.pos;
           if(!p._hasTeam) p.team = m.team;
           if(!p._hasBye)  p.bye  = m.bye;
-        } else if(map) {
+        } else if(map){
           failed.push(p.name);
         }
       }
@@ -1116,6 +1148,7 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
     state.picks = [];
     state.targets = {};
     state.dnds = {};
+    state.isDefaultList = false;
     players.forEach(p=>{
       if(p.target) state.targets[p.id] = true;
       if(p.dnd)    state.dnds[p.id]    = true;
@@ -1256,6 +1289,7 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
   // ---- init ----
   roundsInput.value = state.rounds;
   renderAll();
+  if(state.isDefaultList) loadSleeperPool();
 
 })();
 </script>
