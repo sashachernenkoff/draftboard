@@ -799,6 +799,7 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
       });
 
       // pool drag-to-rerank
+      tile.setAttribute("draggable", "true");
       tile.addEventListener("dragstart", (e)=>{
         poolDragId = p.id;
         e.dataTransfer.effectAllowed = "move";
