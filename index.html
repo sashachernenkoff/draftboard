@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Draft Board — Fantasy Football Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #14181c;
+    --panel: #1b2026;
+    --panel-2: #20262d;
+    --line: #2b323a;
+    --line-soft: #262c33;
+    --text: #eef1f3;
+    --text-dim: #9aa4ad;
+    --text-faint: #616b73;
+    --accent: #c98b73;      /* warm terracotta-ish accent, distinct from position colors */
+    --accent-soft: #3a2c26;
+
+    --qb-fill:#b3d4d7; --qb-ink:#4f7f83;
+    --rb-fill:#dab6ae; --rb-ink:#a66c5d;
+    --wr-fill:#c7e1d9; --wr-ink:#5f9484;
+    --te-fill:#beabcb; --te-ink:#7d6289;
+    --def-fill:#b4c0dc; --def-ink:#5b6a99;
+    --k-fill:#eed8cb; --k-ink:#b98f6f;
+    --fa-fill:#ebe4ef; --fa-ink:#9a8ea6;
+
+    --target: #6fbf8b;
+    --dnd: #d97a7a;
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection{ background: var(--accent); color:#1a1a1a; }
+
+  .mono{ font-family:"JetBrains Mono", ui-monospace, monospace; }
+
+  /* ---------- layout shell ---------- */
+  .app{
+    display:flex;
+    flex-direction:column;
+    height:100vh;
+  }
+
+  header.top{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+    padding:14px 20px;
+    border-bottom:1px solid var(--line);
+    background: linear-gradient(180deg, #171b20, #14181c);
+    flex-wrap:wrap;
+  }
+  .brand{
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+  }
+  .brand .mark{
+    width:10px; height:10px;
+    background: var(--accent);
+    display:inline-block;
+    border-radius:2px;
+    transform: rotate(45deg);
+  }
+  .brand h1{
+    font-size:17px;
+    font-weight:800;
+    letter-spacing:0.2px;
+    margin:0;
+  }
+  .brand .sub{
+    color:var(--text-faint);
+    font-size:12px;
+    font-family:"JetBrains Mono", monospace;
+  }
+
+  .top-controls{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+
+  button, .btn{
+    appearance:none;
+    border:1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--text);
+    font-family:inherit;
+    font-size:12.5px;
+    font-weight:600;
+    padding:8px 12px;
+    border-radius:7px;
+    cursor:pointer;
+    transition: border-color .12s ease, background .12s ease, transform .05s ease;
+    white-space:nowrap;
+  }
+  button:hover{ border-color:#454e58; background:#242b32; }
+  button:active{ transform: translateY(1px); }
+  button.primary{
+    background: var(--accent);
+    border-color: var(--accent);
+    color:#211410;
+  }
+  button.primary:hover{ background:#d69a83; }
+  button.ghost{
+    background:transparent;
+  }
+  button:disabled{ opacity:.4; cursor:not-allowed; }
+
+  input[type="number"], input[type="text"]{
+    background: var(--panel-2);
+    border:1px solid var(--line);
+    color: var(--text);
+    border-radius:7px;
+    padding:7px 10px;
+    font-family:inherit;
+    font-size:12.5px;
+  }
+  input[type="number"]{ width:56px; }
+  input::placeholder{ color: var(--text-faint); }
+
+  /* ---------- main split ---------- */
+  .main{
+    flex:1;
+    display:grid;
+    grid-template-columns: 300px 1fr;
+    min-height:0;
+  }
+  @media (max-width: 900px){
+    .main{ grid-template-columns: 1fr; grid-template-rows: 40vh 1fr; }
+  }
+
+  /* ---------- pool panel ---------- */
+  .pool{
+    border-right:1px solid var(--line);
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+    background: var(--panel);
+  }
+  .pool-head{
+    padding:12px 14px 10px;
+    border-bottom:1px solid var(--line-soft);
+  }
+  .pool-head .search{
+    width:100%;
+    margin-bottom:9px;
+  }
+  .pos-tabs{
+    display:flex;
+    flex-wrap:wrap;
+    gap:5px;
+  }
+  .pos-tab{
+    border:1px solid var(--line);
+    background:transparent;
+    color:var(--text-dim);
+    font-size:11px;
+    font-weight:700;
+    padding:4px 8px;
+    border-radius:5px;
+    cursor:pointer;
+    letter-spacing:.3px;
+  }
+  .pos-tab.active{
+    border-color: transparent;
+    color:#14181c;
+  }
+  .pos-tab[data-pos="ALL"].active{ background: var(--text); }
+  .pos-tab[data-pos="QB"].active{ background: var(--qb-fill); }
+  .pos-tab[data-pos="RB"].active{ background: var(--rb-fill); }
+  .pos-tab[data-pos="WR"].active{ background: var(--wr-fill); }
+  .pos-tab[data-pos="TE"].active{ background: var(--te-fill); }
+  .pos-tab[data-pos="DEF"].active{ background: var(--def-fill); }
+  .pos-tab[data-pos="K"].active{ background: var(--k-fill); }
+
+  .pool-count{
+    padding:8px 14px;
+    font-size:11px;
+    color:var(--text-faint);
+    font-family:"JetBrains Mono", monospace;
+    border-bottom:1px solid var(--line-soft);
+  }
+
+  .pool-list{
+    flex:1;
+    overflow-y:auto;
+    padding:6px;
+  }
+  .player-tile{
+    display:flex;
+    align-items:center;
+    gap:9px;
+    padding:8px 8px;
+    border-radius:8px;
+    cursor:pointer;
+    border:1px solid transparent;
+    margin-bottom:3px;
+    position:relative;
+  }
+  .player-tile:hover{
+    background: var(--panel-2);
+    border-color: var(--line);
+  }
+  .player-tile .rank{
+    font-family:"JetBrains Mono", monospace;
+    font-size:10.5px;
+    color:var(--text-faint);
+    width:22px;
+    text-align:right;
+    flex-shrink:0;
+  }
+  .pos-chip{
+    font-size:10px;
+    font-weight:800;
+    letter-spacing:.3px;
+    padding:2px 5px;
+    border-radius:4px;
+    flex-shrink:0;
+    color:#14181c;
+  }
+  .player-tile .pname{
+    flex:1;
+    min-width:0;
+    font-size:13px;
+    font-weight:600;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .player-tile .pmeta{
+    font-size:10.5px;
+    color:var(--text-faint);
+    font-family:"JetBrains Mono", monospace;
+    flex-shrink:0;
+  }
+  .flag-btns{
+    display:flex;
+    gap:3px;
+    flex-shrink:0;
+  }
+  .flag-btn{
+    width:20px; height:20px;
+    border-radius:5px;
+    border:1px solid var(--line);
+    background:transparent;
+    color:var(--text-faint);
+    font-size:11px;
+    font-weight:800;
+    display:flex; align-items:center; justify-content:center;
+    padding:0;
+    line-height:1;
+  }
+  .flag-btn.star.on{ background: var(--target); border-color:var(--target); color:#0f1a13; }
+  .flag-btn.dnd.on{ background: var(--dnd); border-color:var(--dnd); color:#210b0b; }
+
+  .player-tile.is-target{ box-shadow: inset 3px 0 0 var(--target); }
+  .player-tile.is-dnd{ box-shadow: inset 3px 0 0 var(--dnd); opacity:.55; }
+
+  .pool-empty{
+    padding:30px 18px;
+    text-align:center;
+    color:var(--text-faint);
+    font-size:12.5px;
+    line-height:1.6;
+  }
+
+  /* ---------- board panel ---------- */
+  .board-wrap{
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+  }
+  .board-toolbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:10px 16px;
+    border-bottom:1px solid var(--line-soft);
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .board-toolbar .left, .board-toolbar .right{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  .legend{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    font-size:10.5px;
+    color:var(--text-faint);
+  }
+  .legend span{ display:inline-flex; align-items:center; gap:5px; }
+  .legend i{ width:9px; height:9px; border-radius:2px; display:inline-block; }
+
+  .board-scroll{
+    flex:1;
+    overflow:auto;
+    padding:16px;
+  }
+
+  table.board{
+    border-collapse:separate;
+    border-spacing:5px;
+    table-layout:fixed;
+  }
+  table.board th, table.board td{
+    padding:0;
+  }
+  .team-head{
+    min-width:132px;
+  }
+  .team-head input{
+    width:100%;
+    text-align:center;
+    font-weight:700;
+    font-size:12px;
+    background:var(--panel-2);
+    border:1px solid var(--line);
+  }
+  .team-slot-num{
+    text-align:center;
+    font-size:9.5px;
+    color:var(--text-faint);
+    font-family:"JetBrains Mono", monospace;
+    padding-bottom:3px;
+  }
+  .round-head{
+    width:34px;
+    text-align:center;
+    vertical-align:middle;
+    color:var(--text-faint);
+    font-family:"JetBrains Mono", monospace;
+    font-size:11px;
+    font-weight:700;
+  }
+
+  .cell{
+    width:132px;
+    height:64px;
+    border-radius:8px;
+    border:1px solid var(--line);
+    position:relative;
+    overflow:hidden;
+    cursor:default;
+  }
+  .cell.empty{
+    background: var(--panel);
+  }
+  .cell.next-up{
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .cell.filled{
+    cursor:pointer;
+  }
+  .cell .inner{
+    height:100%;
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    padding:6px 8px;
+  }
+  .cell.filled .inner{
+    background: var(--fill, var(--fa-fill));
+    color: var(--ink, var(--fa-ink));
+  }
+  .cell.blacked .inner{
+    background:#0c0f12 !important;
+    color:#4a5158 !important;
+  }
+  .cell .cname{
+    font-size:12px;
+    font-weight:700;
+    line-height:1.2;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .cell .cmeta{
+    font-size:10px;
+    font-weight:600;
+    font-family:"JetBrains Mono", monospace;
+    margin-top:3px;
+    opacity:.85;
+  }
+  .cell .pickno{
+    position:absolute;
+    top:3px; right:5px;
+    font-size:8.5px;
+    font-family:"JetBrains Mono", monospace;
+    opacity:.6;
+  }
+  .cell .flag-dot{
+    position:absolute;
+    top:4px; left:5px;
+    width:6px; height:6px;
+    border-radius:50%;
+  }
+
+  /* ---------- modal ---------- */
+  .modal-backdrop{
+    position:fixed; inset:0;
+    background:rgba(10,12,14,.7);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:50;
+    padding:20px;
+  }
+  .modal-backdrop.open{ display:flex; }
+  .modal{
+    background: var(--panel);
+    border:1px solid var(--line);
+    border-radius:12px;
+    width:100%;
+    max-width:560px;
+    padding:20px;
+  }
+  .modal h2{
+    margin:0 0 6px;
+    font-size:15px;
+  }
+  .modal p{
+    color:var(--text-dim);
+    font-size:12.5px;
+    line-height:1.6;
+    margin:0 0 14px;
+  }
+  .modal textarea{
+    width:100%;
+    min-height:160px;
+    background: var(--panel-2);
+    border:1px solid var(--line);
+    border-radius:8px;
+    color:var(--text);
+    font-family:"JetBrains Mono", monospace;
+    font-size:12px;
+    padding:10px;
+    resize:vertical;
+  }
+  .modal .modal-actions{
+    display:flex;
+    justify-content:flex-end;
+    gap:8px;
+    margin-top:14px;
+  }
+  .modal code{
+    background: var(--panel-2);
+    padding:1px 5px;
+    border-radius:4px;
+    font-size:11.5px;
+  }
+
+  .toast{
+    position:fixed;
+    bottom:18px; left:50%;
+    transform: translateX(-50%) translateY(10px);
+    background: var(--panel-2);
+    border:1px solid var(--line);
+    color:var(--text);
+    font-size:12.5px;
+    padding:9px 16px;
+    border-radius:8px;
+    opacity:0;
+    pointer-events:none;
+    transition: opacity .18s ease, transform .18s ease;
+    z-index:60;
+  }
+  .toast.show{
+    opacity:1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  .scrollbar-fix::-webkit-scrollbar{ width:9px; height:9px; }
+  .scrollbar-fix::-webkit-scrollbar-track{ background:transparent; }
+  .scrollbar-fix::-webkit-scrollbar-thumb{ background:#31383f; border-radius:5px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <div class="brand">
+      <span class="mark"></span>
+      <h1>Draft Board</h1>
+      <span class="sub">/ 12-TEAM SNAKE</span>
+    </div>
+    <div class="top-controls">
+      <label class="btn" style="display:inline-flex; align-items:center; gap:6px;">
+        Import CSV
+        <input type="file" id="csvFile" accept=".csv,text/csv" style="display:none;">
+      </label>
+      <button id="pasteBtn">Paste list</button>
+      <button id="undoBtn" title="Undo last pick">Undo pick</button>
+      <button id="resetBtn" class="ghost">Reset draft</button>
+    </div>
+  </header>
+
+  <div class="main">
+    <!-- POOL -->
+    <aside class="pool">
+      <div class="pool-head">
+        <input type="text" id="searchBox" class="search" placeholder="Search players…">
+        <div class="pos-tabs" id="posTabs">
+          <button class="pos-tab active" data-pos="ALL">ALL</button>
+          <button class="pos-tab" data-pos="QB">QB</button>
+          <button class="pos-tab" data-pos="RB">RB</button>
+          <button class="pos-tab" data-pos="WR">WR</button>
+          <button class="pos-tab" data-pos="TE">TE</button>
+          <button class="pos-tab" data-pos="DEF">DEF</button>
+          <button class="pos-tab" data-pos="K">K</button>
+        </div>
+      </div>
+      <div class="pool-count" id="poolCount">— players available</div>
+      <div class="pool-list scrollbar-fix" id="poolList"></div>
+    </aside>
+
+    <!-- BOARD -->
+    <section class="board-wrap">
+      <div class="board-toolbar">
+        <div class="left">
+          <span class="mono" style="font-size:11.5px; color:var(--text-faint);">Rounds</span>
+          <input type="number" id="roundsInput" min="1" max="40" value="16">
+          <span class="mono" id="pickStatus" style="font-size:11.5px; color:var(--text-dim); margin-left:6px;"></span>
+        </div>
+        <div class="right legend">
+          <span><i style="background:var(--qb-fill)"></i>QB</span>
+          <span><i style="background:var(--rb-fill)"></i>RB</span>
+          <span><i style="background:var(--wr-fill)"></i>WR</span>
+          <span><i style="background:var(--te-fill)"></i>TE</span>
+          <span><i style="background:var(--def-fill)"></i>DEF</span>
+          <span><i style="background:var(--k-fill)"></i>K</span>
+          <span style="margin-left:6px;"><i style="background:var(--target)"></i>Target</span>
+          <span><i style="background:var(--dnd)"></i>DND</span>
+          <span style="margin-left:6px; color:var(--text-faint);">Click a filled cell to black it out</span>
+        </div>
+      </div>
+      <div class="board-scroll scrollbar-fix">
+        <table class="board" id="boardTable"></table>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- Paste modal -->
+<div class="modal-backdrop" id="pasteModal">
+  <div class="modal">
+    <h2>Paste your player list</h2>
+    <p>One player per line, in rank order. Format: <code>Name, Position, Team, Bye</code> — the team and bye are optional. Example: <code>Ja'Marr Chase, WR, CIN, 6</code></p>
+    <textarea id="pasteArea" placeholder="Ja'Marr Chase, WR, CIN, 6
+Bijan Robinson, RB, ATL, 11
+Justin Jefferson, WR, MIN, 6"></textarea>
+    <div class="modal-actions">
+      <button class="ghost" id="pasteCancel">Cancel</button>
+      <button class="primary" id="pasteApply">Load list</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  const TEAMS = 12;
+  const STORAGE_KEY = "fftracker_state_v1";
+
+  const POS_STYLE = {
+    QB:  {fill:"var(--qb-fill)",  ink:"var(--qb-ink)"},
+    RB:  {fill:"var(--rb-fill)",  ink:"var(--rb-ink)"},
+    WR:  {fill:"var(--wr-fill)",  ink:"var(--wr-ink)"},
+    TE:  {fill:"var(--te-fill)",  ink:"var(--te-ink)"},
+    DEF: {fill:"var(--def-fill)", ink:"var(--def-ink)"},
+    K:   {fill:"var(--k-fill)",   ink:"var(--k-ink)"},
+    FA:  {fill:"var(--fa-fill)",  ink:"var(--fa-ink)"}
+  };
+
+  const SAMPLE_PLAYERS = [
+    ["Ja'Marr Chase","WR","CIN","6"], ["Bijan Robinson","RB","ATL","11"],
+    ["Justin Jefferson","WR","MIN","6"], ["Jahmyr Gibbs","RB","DET","6"],
+    ["CeeDee Lamb","WR","DAL","14"], ["Puka Nacua","WR","LAR","11"],
+    ["Malik Nabers","WR","NYG","8"], ["Ashton Jeanty","RB","LV","13"],
+    ["Josh Allen","QB","BUF","7"], ["Saquon Barkley","RB","PHI","10"],
+    ["Amon-Ra St. Brown","WR","DET","6"], ["Brock Bowers","TE","LV","13"],
+    ["Christian McCaffrey","RB","SF","8"], ["Jonathan Taylor","RB","IND","13"],
+    ["Nico Collins","WR","HOU","8"], ["Derrick Henry","RB","BAL","13"],
+    ["Drake London","WR","ATL","11"], ["A.J. Brown","WR","NE","11"],
+    ["Trey McBride","TE","ARI","14"], ["Lamar Jackson","QB","BAL","13"]
+  ];
+
+  let state = loadState();
+
+  function defaultState(){
+    return {
+      rounds: 16,
+      players: SAMPLE_PLAYERS.map((p,i)=>({
+        id: "p"+i, name:p[0], pos:p[1], team:p[2], bye:p[3]
+      })),
+      picks: [],          // { playerId, blacked }
+      targets: {},         // id -> true
+      dnds: {},             // id -> true
+      teamNames: Array.from({length:TEAMS}, (_,i)=>"Team "+(i+1))
+    };
+  }
+
+  function loadState(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(!raw) return defaultState();
+      const parsed = JSON.parse(raw);
+      if(!parsed.players || !parsed.teamNames) return defaultState();
+      return parsed;
+    }catch(e){ return defaultState(); }
+  }
+
+  function saveState(){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function playerById(id){ return state.players.find(p=>p.id===id); }
+
+  function draftedIds(){ return new Set(state.picks.map(p=>p.playerId)); }
+
+  function availablePlayers(){
+    const drafted = draftedIds();
+    return state.players.filter(p=>!drafted.has(p.id));
+  }
+
+  // ---- snake math ----
+  function slotFor(pickIndex){ // 0-based overall pick index -> {round, col} col is 1..TEAMS
+    const round = Math.floor(pickIndex / TEAMS) + 1;
+    const posInRound = pickIndex % TEAMS;
+    const col = (round % 2 === 1) ? posInRound + 1 : TEAMS - posInRound;
+    return {round, col};
+  }
+
+  // ---- rendering ----
+  const posTabsEl = document.getElementById("posTabs");
+  const searchBox = document.getElementById("searchBox");
+  const poolList = document.getElementById("poolList");
+  const poolCount = document.getElementById("poolCount");
+  const boardTable = document.getElementById("boardTable");
+  const roundsInput = document.getElementById("roundsInput");
+  const pickStatus = document.getElementById("pickStatus");
+  const undoBtn = document.getElementById("undoBtn");
+
+  let activePos = "ALL";
+
+  function styleFor(pos){ return POS_STYLE[pos] || POS_STYLE.FA; }
+
+  function renderPool(){
+    const q = searchBox.value.trim().toLowerCase();
+    let list = availablePlayers();
+    if(activePos !== "ALL") list = list.filter(p=>p.pos===activePos);
+    if(q) list = list.filter(p=> p.name.toLowerCase().includes(q));
+
+    poolCount.textContent = availablePlayers().length + " players available" + (list.length!==availablePlayers().length ? " · " + list.length + " shown" : "");
+
+    poolList.innerHTML = "";
+    if(list.length === 0){
+      const empty = document.createElement("div");
+      empty.className = "pool-empty";
+      empty.textContent = availablePlayers().length === 0
+        ? "Everyone's drafted. Import a new list or reset the draft."
+        : "No players match your search.";
+      poolList.appendChild(empty);
+      return;
+    }
+
+    list.forEach((p) => {
+      const rank = state.players.indexOf(p) + 1;
+      const tile = document.createElement("div");
+      tile.className = "player-tile";
+      if(state.targets[p.id]) tile.classList.add("is-target");
+      if(state.dnds[p.id]) tile.classList.add("is-dnd");
+
+      const sty = styleFor(p.pos);
+      tile.innerHTML = `
+        <span class="rank mono">${rank}</span>
+        <span class="pos-chip" style="background:${sty.fill}">${p.pos}</span>
+        <span class="pname">${escapeHtml(p.name)}</span>
+        <span class="pmeta">${p.team||""}${p.bye?(" · BYE "+p.bye):""}</span>
+        <span class="flag-btns">
+          <button class="flag-btn star ${state.targets[p.id]?'on':''}" title="Mark as target" data-act="target">★</button>
+          <button class="flag-btn dnd ${state.dnds[p.id]?'on':''}" title="Mark as do-not-draft" data-act="dnd">✕</button>
+        </span>
+      `;
+      tile.addEventListener("click", (e)=>{
+        if(e.target.closest(".flag-btn")) return;
+        draftPlayer(p.id);
+      });
+      tile.querySelector('[data-act="target"]').addEventListener("click", (e)=>{
+        e.stopPropagation();
+        toggleFlag("targets", p.id);
+      });
+      tile.querySelector('[data-act="dnd"]').addEventListener("click", (e)=>{
+        e.stopPropagation();
+        toggleFlag("dnds", p.id);
+      });
+      poolList.appendChild(tile);
+    });
+  }
+
+  function toggleFlag(kind, id){
+    if(state[kind][id]) delete state[kind][id];
+    else state[kind][id] = true;
+    saveState();
+    renderPool();
+    renderBoard();
+  }
+
+  function draftPlayer(id){
+    const pickIndex = state.picks.length;
+    const maxPicks = state.rounds * TEAMS;
+    if(pickIndex >= maxPicks){
+      showToast("Board is full — add more rounds to keep drafting.");
+      return;
+    }
+    state.picks.push({ playerId: id, blacked:false });
+    saveState();
+    renderAll();
+    showToast(playerById(id).name + " drafted");
+  }
+
+  function undoLastPick(){
+    if(state.picks.length === 0) return;
+    const removed = state.picks.pop();
+    saveState();
+    renderAll();
+    const p = playerById(removed.playerId);
+    showToast((p?p.name:"Pick") + " returned to the pool");
+  }
+
+  function toggleBlackout(pickIndex){
+    const pick = state.picks[pickIndex];
+    if(!pick) return;
+    pick.blacked = !pick.blacked;
+    saveState();
+    renderBoard();
+  }
+
+  function renderBoard(){
+    const rounds = state.rounds;
+    const drafted = state.picks;
+    const nextPickIndex = drafted.length;
+    const nextSlot = nextPickIndex < rounds*TEAMS ? slotFor(nextPickIndex) : null;
+
+    // build lookup: round -> col -> pickIndex
+    const grid = {};
+    drafted.forEach((pick, idx)=>{
+      const {round, col} = slotFor(idx);
+      grid[round+"_"+col] = idx;
+    });
+
+    let html = "<thead><tr><th class='round-head'></th>";
+    for(let c=1;c<=TEAMS;c++){
+      html += `<th class="team-head">
+        <div class="team-slot-num">SLOT ${c}</div>
+        <input type="text" data-team="${c-1}" value="${escapeAttr(state.teamNames[c-1])}">
+      </th>`;
+    }
+    html += "</tr></thead><tbody>";
+
+    for(let r=1;r<=rounds;r++){
+      html += `<tr><td class="round-head">R${r}</td>`;
+      for(let c=1;c<=TEAMS;c++){
+        const idx = grid[r+"_"+c];
+        const isNext = nextSlot && nextSlot.round===r && nextSlot.col===c;
+        if(idx===undefined){
+          html += `<td><div class="cell empty${isNext?' next-up':''}" data-round="${r}" data-col="${c}">
+            <div class="inner"></div>
+          </div></td>`;
+        } else {
+          const pick = drafted[idx];
+          const p = playerById(pick.playerId);
+          const sty = styleFor(p ? p.pos : "FA");
+          const flagDot = state.targets[pick.playerId] ? `<span class="flag-dot" style="background:var(--target)"></span>`
+                        : state.dnds[pick.playerId] ? `<span class="flag-dot" style="background:var(--dnd)"></span>` : "";
+          html += `<td><div class="cell filled${pick.blacked?' blacked':''}" data-pick-idx="${idx}" style="--fill:${sty.fill}; --ink:${sty.ink};">
+            <span class="pickno">#${idx+1}</span>
+            ${flagDot}
+            <div class="inner">
+              <div class="cname">${p?escapeHtml(p.name):"—"}</div>
+              <div class="cmeta">${p?p.pos:""}${p&&p.team?(" · "+p.team):""}${p&&p.bye?(" · BYE "+p.bye):""}</div>
+            </div>
+          </div></td>`;
+        }
+      }
+      html += "</tr>";
+    }
+    html += "</tbody>";
+    boardTable.innerHTML = html;
+
+    // wire up cell clicks
+    boardTable.querySelectorAll(".cell.filled").forEach(el=>{
+      el.addEventListener("click", ()=> toggleBlackout(parseInt(el.dataset.pickIdx,10)));
+    });
+    boardTable.querySelectorAll('input[data-team]').forEach(inp=>{
+      inp.addEventListener("change", ()=>{
+        state.teamNames[parseInt(inp.dataset.team,10)] = inp.value || ("Team "+(parseInt(inp.dataset.team,10)+1));
+        saveState();
+      });
+    });
+
+    const totalPicks = rounds*TEAMS;
+    if(drafted.length >= totalPicks){
+      pickStatus.textContent = "Draft complete · " + totalPicks + " picks";
+    } else {
+      pickStatus.textContent = "On the clock: Round " + nextSlot.round + ", " + state.teamNames[nextSlot.col-1] + " (pick #" + (nextPickIndex+1) + ")";
+    }
+    undoBtn.disabled = drafted.length === 0;
+  }
+
+  function renderAll(){ renderPool(); renderBoard(); }
+
+  // ---- utils ----
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function escapeAttr(s){ return escapeHtml(s); }
+
+  let toastTimer = null;
+  function showToast(msg){
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=> t.classList.remove("show"), 1800);
+  }
+
+  // ---- CSV / paste import ----
+  function parsePlayerLines(text){
+    const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+    const out = [];
+    lines.forEach((line, i)=>{
+      const parts = line.split(",").map(s=>s.trim().replace(/^"|"$/g,""));
+      if(parts.length < 1) return;
+      const [name, pos, team, bye] = parts;
+      if(i===0 && /^name$/i.test(name)) return; // skip header row
+      if(!name) return;
+      let normPos = (pos||"FA").toUpperCase();
+      if(!POS_STYLE[normPos]) normPos = normPos.replace(/^DST$|^D\/ST$/,"DEF");
+      if(!POS_STYLE[normPos]) normPos = "FA";
+      out.push({
+        id: "p" + Date.now() + "_" + i + "_" + Math.floor(Math.random()*10000),
+        name, pos: normPos, team: team||"", bye: bye||""
+      });
+    });
+    return out;
+  }
+
+  function loadNewPlayerList(players){
+    if(players.length === 0){ showToast("No players found in that list."); return; }
+    state.players = players;
+    state.picks = [];
+    state.targets = {};
+    state.dnds = {};
+    saveState();
+    renderAll();
+    showToast("Loaded " + players.length + " players");
+  }
+
+  document.getElementById("csvFile").addEventListener("change", (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=> loadNewPlayerList(parsePlayerLines(reader.result));
+    reader.readAsText(file);
+    e.target.value = "";
+  });
+
+  const pasteModal = document.getElementById("pasteModal");
+  document.getElementById("pasteBtn").addEventListener("click", ()=> pasteModal.classList.add("open"));
+  document.getElementById("pasteCancel").addEventListener("click", ()=> pasteModal.classList.remove("open"));
+  document.getElementById("pasteApply").addEventListener("click", ()=>{
+    const text = document.getElementById("pasteArea").value;
+    const players = parsePlayerLines(text);
+    if(players.length){
+      loadNewPlayerList(players);
+      pasteModal.classList.remove("open");
+      document.getElementById("pasteArea").value = "";
+    } else {
+      showToast("Couldn't find any players in that text.");
+    }
+  });
+
+  // ---- controls ----
+  posTabsEl.addEventListener("click", (e)=>{
+    const btn = e.target.closest(".pos-tab");
+    if(!btn) return;
+    posTabsEl.querySelectorAll(".pos-tab").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    activePos = btn.dataset.pos;
+    renderPool();
+  });
+
+  searchBox.addEventListener("input", renderPool);
+
+  roundsInput.addEventListener("change", ()=>{
+    let v = parseInt(roundsInput.value,10);
+    if(isNaN(v) || v < 1) v = 1;
+    if(v > 40) v = 40;
+    roundsInput.value = v;
+    state.rounds = v;
+    saveState();
+    renderBoard();
+  });
+
+  undoBtn.addEventListener("click", undoLastPick);
+
+  document.getElementById("resetBtn").addEventListener("click", ()=>{
+    if(!confirm("Reset the draft? This clears all picks but keeps your player list and target/DND flags.")) return;
+    state.picks = [];
+    saveState();
+    renderAll();
+    showToast("Draft reset");
+  });
+
+  // ---- init ----
+  roundsInput.value = state.rounds;
+  renderAll();
+
+})();
+</script>
+</body>
+</html>
