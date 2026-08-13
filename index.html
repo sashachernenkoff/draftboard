@@ -782,8 +782,9 @@ Justin Jefferson, WR, MIN, 6"></textarea>
   }
 
   function toggleFlag(kind, id){
-    if(state[kind][id]) delete state[kind][id];
-    else state[kind][id] = true;
+    const other = kind === "targets" ? "dnds" : "targets";
+    if(state[kind][id]){ delete state[kind][id]; }
+    else { state[kind][id] = true; delete state[other][id]; }
     saveState();
     renderPool();
     renderBoard();
