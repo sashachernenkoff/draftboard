@@ -643,12 +643,13 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
 </div>
 
 <div class="ctx-menu" id="ctxMenu">
-  <div class="ctx-item" id="ctxDraft"></div>
-  <div class="ctx-sep"></div>
+  <div class="ctx-item" id="ctxDraft">Draft player</div>
+  <div class="ctx-sep" id="ctxDraftSep"></div>
   <div class="ctx-item" id="ctxStar"></div>
   <div class="ctx-item" id="ctxDnd"></div>
   <div class="ctx-sep"></div>
   <div class="ctx-item ctx-danger" id="ctxRemove">Remove player</div>
+  <div class="ctx-item ctx-danger" id="ctxReturn">Return to pool</div>
 </div>
 
 <div class="drop-line" id="dropLine"></div>
@@ -1280,25 +1281,32 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
   });
 
   // ---- right-click context menu ----
-  const ctxMenu = document.getElementById("ctxMenu");
-  const ctxDraft = document.getElementById("ctxDraft");
-  const ctxStar  = document.getElementById("ctxStar");
-  const ctxDnd   = document.getElementById("ctxDnd");
-  const ctxRemove = document.getElementById("ctxRemove");
+  const ctxMenu    = document.getElementById("ctxMenu");
+  const ctxDraft   = document.getElementById("ctxDraft");
+  const ctxDraftSep= document.getElementById("ctxDraftSep");
+  const ctxStar    = document.getElementById("ctxStar");
+  const ctxDnd     = document.getElementById("ctxDnd");
+  const ctxRemove  = document.getElementById("ctxRemove");
+  const ctxReturn  = document.getElementById("ctxReturn");
   let ctxPlayerId = null;
   let ctxContext  = 'pool'; // 'pool' | 'board'
   let ctxJustOpened = false;
+
+  function show(el){ el.style.display = ""; }
+  function hide(el){ el.style.display = "none"; }
 
   function openCtxMenu(x, y, playerId, context){
     ctxPlayerId = playerId;
     ctxContext  = context || 'pool';
     const isTarget = !!state.targets[playerId];
     const isDnd    = !!state.dnds[playerId];
-    ctxDraft.textContent  = ctxContext === 'board' ? "Return to pool" : "Draft player";
-    ctxStar.textContent   = isTarget ? "★ Remove target"       : "★ Add target";
-    ctxDnd.textContent    = isDnd    ? "✕ Remove do-not-draft"  : "✕ Do not draft";
-    ctxRemove.style.display = ctxContext === 'board' ? "none" : "";
-    ctxRemove.textContent = "Remove player";
+    ctxStar.textContent = isTarget ? "★ Remove target"      : "★ Add target";
+    ctxDnd.textContent  = isDnd    ? "✕ Remove do-not-draft" : "✕ Do not draft";
+    if(ctxContext === 'board'){
+      hide(ctxDraft); hide(ctxDraftSep); hide(ctxRemove); show(ctxReturn);
+    } else {
+      show(ctxDraft); show(ctxDraftSep); show(ctxRemove); hide(ctxReturn);
+    }
 
     ctxMenu.style.left = x + "px";
     ctxMenu.style.top  = y + "px";
@@ -1315,16 +1323,15 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
   function closeCtxMenu(){ ctxMenu.classList.remove("open"); ctxPlayerId = null; }
 
   ctxDraft.addEventListener("click", ()=>{
+    if(ctxPlayerId) draftPlayer(ctxPlayerId);
+    closeCtxMenu();
+  });
+  ctxReturn.addEventListener("click", ()=>{
     if(!ctxPlayerId){ closeCtxMenu(); return; }
-    if(ctxContext === 'board'){
-      state.picks = state.picks.filter(p=>p.playerId !== ctxPlayerId);
-      saveState(); renderAll();
-      closeCtxMenu();
-      showToast("Player returned to pool");
-    } else {
-      draftPlayer(ctxPlayerId);
-      closeCtxMenu();
-    }
+    state.picks = state.picks.filter(p=>p.playerId !== ctxPlayerId);
+    saveState(); renderAll();
+    closeCtxMenu();
+    showToast("Player returned to pool");
   });
   ctxStar.addEventListener("click", ()=>{
     if(ctxPlayerId) toggleFlag("targets", ctxPlayerId);
