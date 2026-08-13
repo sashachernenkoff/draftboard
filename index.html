@@ -415,11 +415,9 @@
   }
   .cell.filled[draggable="true"]{ cursor:grab; }
   .cell.filled[draggable="true"]:active{ cursor:grabbing; }
-  .cell.drag-over{
-    border-color:var(--accent) !important;
-    box-shadow:0 0 0 2px var(--accent) !important;
-  }
   .cell.drag-src{ opacity:.35; }
+  .cell.drop-before{ box-shadow: inset 3px 0 0 0 var(--accent) !important; }
+  .cell.drop-after { box-shadow: inset -3px 0 0 0 var(--accent) !important; }
 
   /* ---------- context menu ---------- */
   .ctx-menu{
@@ -792,9 +790,10 @@ Justin Jefferson, WR, MIN, 6"></textarea>
     showToast((p?p.name:"Pick") + " returned to the pool");
   }
 
-  function reorderPick(from, to){
+  function reorderPickInsertBefore(from, insertBefore){
     const [pick] = state.picks.splice(from, 1);
-    state.picks.splice(to, 0, pick);
+    const at = insertBefore > from ? insertBefore - 1 : insertBefore;
+    state.picks.splice(at, 0, pick);
     saveState();
     renderAll();
   }
@@ -862,6 +861,12 @@ Justin Jefferson, WR, MIN, 6"></textarea>
     // wire up cell interactions (click to blackout, drag-and-drop to reorder)
     let dragFrom = null;
 
+    function clearDropIndicators(){
+      boardTable.querySelectorAll(".drop-before,.drop-after").forEach(c=>{
+        c.classList.remove("drop-before","drop-after");
+      });
+    }
+
     boardTable.querySelectorAll(".cell.filled").forEach(el=>{
       el.setAttribute("draggable", "true");
 
@@ -874,7 +879,7 @@ Justin Jefferson, WR, MIN, 6"></textarea>
 
       el.addEventListener("dragend", ()=>{
         el.classList.remove("drag-src");
-        boardTable.querySelectorAll(".drag-over").forEach(c=>c.classList.remove("drag-over"));
+        clearDropIndicators();
         dragFrom = null;
       });
 
@@ -882,17 +887,26 @@ Justin Jefferson, WR, MIN, 6"></textarea>
         if(dragFrom === null) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        boardTable.querySelectorAll(".drag-over").forEach(c=>c.classList.remove("drag-over"));
-        el.classList.add("drag-over");
+        clearDropIndicators();
+        const rect = el.getBoundingClientRect();
+        const isLeftHalf = (e.clientX - rect.left) < rect.width / 2;
+        el.classList.add(isLeftHalf ? "drop-before" : "drop-after");
       });
 
-      el.addEventListener("dragleave", ()=> el.classList.remove("drag-over"));
+      el.addEventListener("dragleave", (e)=>{
+        // only clear if leaving into a non-descendant
+        if(!el.contains(e.relatedTarget)) el.classList.remove("drop-before","drop-after");
+      });
 
       el.addEventListener("drop", (e)=>{
         e.preventDefault();
-        el.classList.remove("drag-over");
-        const to = parseInt(el.dataset.pickIdx, 10);
-        if(dragFrom !== null && dragFrom !== to) reorderPick(dragFrom, to);
+        const isBefore = el.classList.contains("drop-before");
+        clearDropIndicators();
+        const cellIdx = parseInt(el.dataset.pickIdx, 10);
+        const insertBefore = isBefore ? cellIdx : cellIdx + 1;
+        if(dragFrom !== null && insertBefore !== dragFrom && insertBefore !== dragFrom + 1){
+          reorderPickInsertBefore(dragFrom, insertBefore);
+        }
       });
 
       el.addEventListener("click", ()=>{
@@ -1017,6 +1031,8 @@ Justin Jefferson, WR, MIN, 6"></textarea>
   const ctxRemove = document.getElementById("ctxRemove");
   let ctxPlayerId = null;
 
+  let ctxJustOpened = false;
+
   function openCtxMenu(x, y, playerId){
     ctxPlayerId = playerId;
     const isTarget = !!state.targets[playerId];
@@ -1027,6 +1043,7 @@ Justin Jefferson, WR, MIN, 6"></textarea>
     ctxMenu.style.left = x + "px";
     ctxMenu.style.top  = y + "px";
     ctxMenu.classList.add("open");
+    ctxJustOpened = true;   // guard against the click event that follows contextmenu on Mac
 
     // keep menu within viewport
     requestAnimationFrame(()=>{
@@ -1067,6 +1084,7 @@ Justin Jefferson, WR, MIN, 6"></textarea>
   });
 
   document.addEventListener("click", (e)=>{
+    if(ctxJustOpened){ ctxJustOpened = false; return; }
     if(!ctxMenu.contains(e.target)) closeCtxMenu();
   });
   document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeCtxMenu(); });
