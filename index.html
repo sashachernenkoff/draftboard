@@ -20,12 +20,12 @@
     --accent: #c98b73;      /* warm terracotta-ish accent, distinct from position colors */
     --accent-soft: #3a2c26;
 
-    --qb-fill:#b3d4d7; --qb-ink:#4f7f83;
-    --rb-fill:#dab6ae; --rb-ink:#a66c5d;
-    --wr-fill:#c7e1d9; --wr-ink:#5f9484;
-    --te-fill:#beabcb; --te-ink:#7d6289;
-    --def-fill:#b4c0dc; --def-ink:#5b6a99;
-    --k-fill:#eed8cb; --k-ink:#b98f6f;
+    --qb-fill:#e8bfbf; --qb-ink:#9a3333;
+    --rb-fill:#b8cce8; --rb-ink:#2e5899;
+    --wr-fill:#b8dfc4; --wr-ink:#3d7a52;
+    --te-fill:#ede8a0; --te-ink:#897718;
+    --def-fill:#d4b8a0; --def-ink:#7a4c28;
+    --k-fill:#edbacc; --k-ink:#a83060;
     --fa-fill:#ebe4ef; --fa-ink:#9a8ea6;
 
     --target: #6fbf8b;
@@ -408,12 +408,41 @@
     font-family:"JetBrains Mono", monospace;
     opacity:.6;
   }
-  .cell .flag-dot{
+  .cell .flag-bar{
     position:absolute;
-    top:4px; left:5px;
-    width:6px; height:6px;
-    border-radius:50%;
+    top:0; left:0; bottom:0;
+    width:4px;
   }
+
+  /* ---------- context menu ---------- */
+  .ctx-menu{
+    position:fixed;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:9px;
+    padding:5px;
+    z-index:100;
+    min-width:188px;
+    box-shadow:0 8px 24px rgba(0,0,0,.45);
+    display:none;
+  }
+  .ctx-menu.open{ display:block; }
+  .ctx-item{
+    display:flex;
+    align-items:center;
+    gap:9px;
+    padding:8px 12px;
+    border-radius:6px;
+    font-size:12.5px;
+    font-weight:600;
+    cursor:pointer;
+    color:var(--text);
+    transition:background .1s;
+    user-select:none;
+  }
+  .ctx-item:hover{ background:var(--panel-2); }
+  .ctx-item.ctx-danger{ color:var(--dnd); }
+  .ctx-sep{ height:1px; background:var(--line); margin:4px 0; }
 
   /* ---------- modal ---------- */
   .modal-backdrop{
@@ -509,7 +538,6 @@
         <input type="file" id="csvFile" accept=".csv,text/csv" style="display:none;">
       </label>
       <button id="pasteBtn">Paste list</button>
-      <button id="undoBtn" title="Undo last pick">Undo pick</button>
       <button id="resetBtn" class="ghost">Reset draft</button>
     </div>
   </header>
@@ -573,6 +601,13 @@ Justin Jefferson, WR, MIN, 6"></textarea>
       <button class="primary" id="pasteApply">Load list</button>
     </div>
   </div>
+</div>
+
+<div class="ctx-menu" id="ctxMenu">
+  <div class="ctx-item" id="ctxStar"></div>
+  <div class="ctx-item" id="ctxDnd"></div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item ctx-danger" id="ctxRemove">Remove player</div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -661,7 +696,6 @@ Justin Jefferson, WR, MIN, 6"></textarea>
   const boardTable = document.getElementById("boardTable");
   const roundsInput = document.getElementById("roundsInput");
   const pickStatus = document.getElementById("pickStatus");
-  const undoBtn = document.getElementById("undoBtn");
 
   let activePos = "ALL";
 
@@ -690,6 +724,7 @@ Justin Jefferson, WR, MIN, 6"></textarea>
       const rank = state.players.indexOf(p) + 1;
       const tile = document.createElement("div");
       tile.className = "player-tile";
+      tile.dataset.pid = p.id;
       if(state.targets[p.id]) tile.classList.add("is-target");
       if(state.dnds[p.id]) tile.classList.add("is-dnd");
 
@@ -793,11 +828,11 @@ Justin Jefferson, WR, MIN, 6"></textarea>
           const pick = drafted[idx];
           const p = playerById(pick.playerId);
           const sty = styleFor(p ? p.pos : "FA");
-          const flagDot = state.targets[pick.playerId] ? `<span class="flag-dot" style="background:var(--target)"></span>`
-                        : state.dnds[pick.playerId] ? `<span class="flag-dot" style="background:var(--dnd)"></span>` : "";
+          const flagBar = state.targets[pick.playerId] ? `<span class="flag-bar" style="background:var(--target)"></span>`
+                        : state.dnds[pick.playerId] ? `<span class="flag-bar" style="background:var(--dnd)"></span>` : "";
           html += `<td><div class="cell filled${pick.blacked?' blacked':''}" data-pick-idx="${idx}" style="--fill:${sty.fill}; --ink:${sty.ink};">
             <span class="pickno">#${idx+1}</span>
-            ${flagDot}
+            ${flagBar}
             <div class="inner">
               <div class="cname">${p?escapeHtml(p.name):"—"}</div>
               <div class="cmeta">${p?p.pos:""}${p&&p.team?(" · "+p.team):""}${p&&p.bye?(" · BYE "+p.bye):""}</div>
@@ -827,7 +862,6 @@ Justin Jefferson, WR, MIN, 6"></textarea>
     } else {
       pickStatus.textContent = "On the clock: Round " + nextSlot.round + ", " + state.teamNames[nextSlot.col-1] + " (pick #" + (nextPickIndex+1) + ")";
     }
-    undoBtn.disabled = drafted.length === 0;
   }
 
   function renderAll(){ renderPool(); renderBoard(); }
@@ -925,7 +959,66 @@ Justin Jefferson, WR, MIN, 6"></textarea>
     renderBoard();
   });
 
-  undoBtn.addEventListener("click", undoLastPick);
+  // ---- right-click context menu ----
+  const ctxMenu = document.getElementById("ctxMenu");
+  const ctxStar = document.getElementById("ctxStar");
+  const ctxDnd  = document.getElementById("ctxDnd");
+  const ctxRemove = document.getElementById("ctxRemove");
+  let ctxPlayerId = null;
+
+  function openCtxMenu(x, y, playerId){
+    ctxPlayerId = playerId;
+    const isTarget = !!state.targets[playerId];
+    const isDnd    = !!state.dnds[playerId];
+    ctxStar.textContent = isTarget ? "★ Remove target" : "★ Add target";
+    ctxDnd.textContent  = isDnd    ? "✕ Remove do-not-draft" : "✕ Do not draft";
+
+    ctxMenu.style.left = x + "px";
+    ctxMenu.style.top  = y + "px";
+    ctxMenu.classList.add("open");
+
+    // keep menu within viewport
+    requestAnimationFrame(()=>{
+      const r = ctxMenu.getBoundingClientRect();
+      if(r.right  > window.innerWidth)  ctxMenu.style.left = (x - r.width)  + "px";
+      if(r.bottom > window.innerHeight) ctxMenu.style.top  = (y - r.height) + "px";
+    });
+  }
+
+  function closeCtxMenu(){ ctxMenu.classList.remove("open"); ctxPlayerId = null; }
+
+  poolList.addEventListener("contextmenu", (e)=>{
+    const tile = e.target.closest(".player-tile");
+    if(!tile) return;
+    e.preventDefault();
+    openCtxMenu(e.clientX, e.clientY, tile.dataset.pid);
+  });
+
+  ctxStar.addEventListener("click", ()=>{
+    if(ctxPlayerId) toggleFlag("targets", ctxPlayerId);
+    closeCtxMenu();
+  });
+  ctxDnd.addEventListener("click", ()=>{
+    if(ctxPlayerId) toggleFlag("dnds", ctxPlayerId);
+    closeCtxMenu();
+  });
+  ctxRemove.addEventListener("click", ()=>{
+    if(!ctxPlayerId){ closeCtxMenu(); return; }
+    const id = ctxPlayerId;
+    state.players = state.players.filter(p=>p.id!==id);
+    state.picks   = state.picks.filter(p=>p.playerId!==id);
+    delete state.targets[id];
+    delete state.dnds[id];
+    saveState();
+    renderAll();
+    closeCtxMenu();
+    showToast("Player removed");
+  });
+
+  document.addEventListener("click", (e)=>{
+    if(!ctxMenu.contains(e.target)) closeCtxMenu();
+  });
+  document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeCtxMenu(); });
 
   document.getElementById("resetBtn").addEventListener("click", ()=>{
     if(!confirm("Reset the draft? This clears all picks but keeps your player list and target/DND flags.")) return;
