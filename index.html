@@ -434,12 +434,10 @@
   }
   .cell.filled[draggable="true"]{ cursor:grab; }
   .cell.filled[draggable="true"]:active{ cursor:grabbing; }
-  .cell.filled{ transition: transform 0.12s ease, border-color 0.12s ease; }
+  .cell.filled{ transition: transform 0.12s ease; }
   .cell.drag-src{ opacity:.35; }
-  .cell.drop-before{ box-shadow: -2px 0 0 var(--accent) !important; }
-  .cell.drop-after { box-shadow:  2px 0 0 var(--accent) !important; }
-  .cell.push-prev{ transform: translateX(-4px); border-color: var(--accent) !important; }
-  .cell.push-next{ transform: translateX(4px);  border-color: var(--accent) !important; }
+  .cell.push-prev{ transform: translateX(-4px); box-shadow: 2px 0 0 var(--accent); } /* right edge of cell left of gap */
+  .cell.push-next{ transform: translateX(4px);  box-shadow: -2px 0 0 var(--accent); } /* left edge of cell right of gap */
 
   /* ---------- context menu ---------- */
   .ctx-menu{
@@ -957,12 +955,10 @@ function reorderPickInsertBefore(from, insertBefore){
     // wire up cell interactions (click to blackout, drag-and-drop to reorder)
     let dragFrom = null;
     let dragInsertBefore = null;
-    let boardDragTarget = null;
     let pushPrevEl = null;
     let pushNextEl = null;
 
     function clearBoardDragUI(){
-      if(boardDragTarget){ boardDragTarget.classList.remove("drop-before","drop-after"); boardDragTarget = null; }
       if(pushPrevEl){ pushPrevEl.classList.remove("push-prev"); pushPrevEl = null; }
       if(pushNextEl){ pushNextEl.classList.remove("push-next"); pushNextEl = null; }
     }
@@ -995,14 +991,6 @@ function reorderPickInsertBefore(from, insertBefore){
         const cellIdx = parseInt(el.dataset.pickIdx, 10);
         dragInsertBefore = isLeftHalf ? cellIdx : cellIdx + 1;
 
-        if(boardDragTarget && boardDragTarget !== el){
-          boardDragTarget.classList.remove("drop-before","drop-after");
-        }
-        boardDragTarget = el;
-        el.classList.toggle("drop-before", isLeftHalf);
-        el.classList.toggle("drop-after", !isLeftHalf);
-
-        // bump the cell on each side of the insertion point
         if(pushPrevEl){ pushPrevEl.classList.remove("push-prev"); pushPrevEl = null; }
         if(pushNextEl){ pushNextEl.classList.remove("push-next"); pushNextEl = null; }
         const prev = boardTable.querySelector(`.cell[data-pick-idx="${dragInsertBefore - 1}"]`);
