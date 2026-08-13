@@ -434,9 +434,12 @@
   }
   .cell.filled[draggable="true"]{ cursor:grab; }
   .cell.filled[draggable="true"]:active{ cursor:grabbing; }
+  .cell.filled{ transition: transform 0.12s ease; }
   .cell.drag-src{ opacity:.35; }
   .cell.drop-before{ box-shadow: -2px 0 0 var(--accent) !important; }
   .cell.drop-after { box-shadow:  2px 0 0 var(--accent) !important; }
+  .cell.push-prev{ transform: translateX(-5px); }
+  .cell.push-next{ transform: translateX(5px); }
 
   /* ---------- context menu ---------- */
   .ctx-menu{
@@ -950,12 +953,13 @@ function reorderPickInsertBefore(from, insertBefore){
     let dragFrom = null;
     let dragInsertBefore = null;
     let boardDragTarget = null;
+    let pushPrevEl = null;
+    let pushNextEl = null;
 
     function clearBoardDragUI(){
-      if(boardDragTarget){
-        boardDragTarget.classList.remove("drop-before","drop-after");
-        boardDragTarget = null;
-      }
+      if(boardDragTarget){ boardDragTarget.classList.remove("drop-before","drop-after"); boardDragTarget = null; }
+      if(pushPrevEl){ pushPrevEl.classList.remove("push-prev"); pushPrevEl = null; }
+      if(pushNextEl){ pushNextEl.classList.remove("push-next"); pushNextEl = null; }
     }
 
     boardTable.querySelectorAll(".cell.filled").forEach(el=>{
@@ -992,6 +996,14 @@ function reorderPickInsertBefore(from, insertBefore){
         boardDragTarget = el;
         el.classList.toggle("drop-before", isLeftHalf);
         el.classList.toggle("drop-after", !isLeftHalf);
+
+        // bump the cell on each side of the insertion point
+        if(pushPrevEl){ pushPrevEl.classList.remove("push-prev"); pushPrevEl = null; }
+        if(pushNextEl){ pushNextEl.classList.remove("push-next"); pushNextEl = null; }
+        const prev = boardTable.querySelector(`.cell[data-pick-idx="${dragInsertBefore - 1}"]`);
+        const next = boardTable.querySelector(`.cell[data-pick-idx="${dragInsertBefore}"]`);
+        if(prev && parseInt(prev.dataset.pickIdx,10) !== dragFrom){ pushPrevEl = prev; prev.classList.add("push-prev"); }
+        if(next && parseInt(next.dataset.pickIdx,10) !== dragFrom){ pushNextEl = next; next.classList.add("push-next"); }
       });
 
       el.addEventListener("drop", (e)=>{
