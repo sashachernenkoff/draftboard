@@ -270,12 +270,9 @@
   .player-tile.is-target{ box-shadow: inset 3px 0 0 var(--target); }
   .player-tile.is-dnd{ box-shadow: inset 3px 0 0 var(--dnd); opacity:.55; }
   .player-tile[draggable="true"]{ cursor:grab; }
-  .player-tile{ transition: border-color 0.12s ease; }
   .player-tile.pool-drag-src{ opacity:.35; }
-  .player-tile.pool-drop-before{ box-shadow: 0 -2px 0 var(--accent); }
-  .player-tile.pool-drop-after { box-shadow: 0  2px 0 var(--accent); }
-  .player-tile.pool-push-prev,
-  .player-tile.pool-push-next { border-color: var(--accent) !important; }
+  .player-tile.pool-push-prev{ box-shadow: 0  2px 0 var(--accent); } /* bottom edge of tile above */
+  .player-tile.pool-push-next{ box-shadow: 0 -2px 0 var(--accent); } /* top edge of tile below */
 
   .pool-empty{
     padding:30px 18px;
@@ -721,7 +718,6 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
 
   let activePos = "ALL";
   let poolDragId     = null;
-  let poolDragTarget = null;
   let poolPushPrevEl = null;
   let poolPushNextEl = null;
 
@@ -801,7 +797,6 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
       });
       tile.addEventListener("dragend", ()=>{
         tile.classList.remove("pool-drag-src");
-        if(poolDragTarget){ poolDragTarget.classList.remove("pool-drop-before","pool-drop-after"); poolDragTarget = null; }
         if(poolPushPrevEl){ poolPushPrevEl.classList.remove("pool-push-prev"); poolPushPrevEl = null; }
         if(poolPushNextEl){ poolPushNextEl.classList.remove("pool-push-next"); poolPushNextEl = null; }
         poolDragId = null;
@@ -809,25 +804,19 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
       tile.addEventListener("dragover", (e)=>{
         if(!poolDragId || poolDragId === p.id) return;
         e.preventDefault();
-        if(poolDragTarget && poolDragTarget !== tile){
-          poolDragTarget.classList.remove("pool-drop-before","pool-drop-after");
-        }
-        poolDragTarget = tile;
-        const isTop = (e.clientY - tile.getBoundingClientRect().top) < tile.offsetHeight / 2;
-        tile.classList.toggle("pool-drop-before", isTop);
-        tile.classList.toggle("pool-drop-after", !isTop);
 
-        // highlight both neighbours
-        if(poolPushPrevEl){ poolPushPrevEl.classList.remove("pool-push-prev"); poolPushPrevEl = null; }
-        if(poolPushNextEl){ poolPushNextEl.classList.remove("pool-push-next"); poolPushNextEl = null; }
+        const isTop = (e.clientY - tile.getBoundingClientRect().top) < tile.offsetHeight / 2;
+        // tile above insertion gets a bottom-edge line; tile below gets a top-edge line
         const prevT = isTop ? tile.previousElementSibling : tile;
         const nextT = isTop ? tile : tile.nextElementSibling;
+
+        if(poolPushPrevEl){ poolPushPrevEl.classList.remove("pool-push-prev"); poolPushPrevEl = null; }
+        if(poolPushNextEl){ poolPushNextEl.classList.remove("pool-push-next"); poolPushNextEl = null; }
         if(prevT && prevT.dataset.pid && prevT.dataset.pid !== poolDragId){ poolPushPrevEl = prevT; prevT.classList.add("pool-push-prev"); }
         if(nextT && nextT.dataset.pid && nextT.dataset.pid !== poolDragId){ poolPushNextEl = nextT; nextT.classList.add("pool-push-next"); }
       });
       tile.addEventListener("drop", (e)=>{
         e.preventDefault();
-        if(poolDragTarget){ poolDragTarget.classList.remove("pool-drop-before","pool-drop-after"); poolDragTarget = null; }
         if(poolPushPrevEl){ poolPushPrevEl.classList.remove("pool-push-prev"); poolPushPrevEl = null; }
         if(poolPushNextEl){ poolPushNextEl.classList.remove("pool-push-next"); poolPushNextEl = null; }
         if(!poolDragId || poolDragId === p.id) return;
