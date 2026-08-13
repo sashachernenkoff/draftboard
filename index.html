@@ -413,6 +413,13 @@
     top:0; left:0; bottom:0;
     width:4px;
   }
+  .cell.filled[draggable="true"]{ cursor:grab; }
+  .cell.filled[draggable="true"]:active{ cursor:grabbing; }
+  .cell.drag-over{
+    border-color:var(--accent) !important;
+    box-shadow:0 0 0 2px var(--accent) !important;
+  }
+  .cell.drag-src{ opacity:.35; }
 
   /* ---------- context menu ---------- */
   .ctx-menu{
@@ -785,6 +792,13 @@ Justin Jefferson, WR, MIN, 6"></textarea>
     showToast((p?p.name:"Pick") + " returned to the pool");
   }
 
+  function reorderPick(from, to){
+    const [pick] = state.picks.splice(from, 1);
+    state.picks.splice(to, 0, pick);
+    saveState();
+    renderAll();
+  }
+
   function toggleBlackout(pickIndex){
     const pick = state.picks[pickIndex];
     if(!pick) return;
@@ -845,9 +859,46 @@ Justin Jefferson, WR, MIN, 6"></textarea>
     html += "</tbody>";
     boardTable.innerHTML = html;
 
-    // wire up cell clicks
+    // wire up cell interactions (click to blackout, drag-and-drop to reorder)
+    let dragFrom = null;
+
     boardTable.querySelectorAll(".cell.filled").forEach(el=>{
-      el.addEventListener("click", ()=> toggleBlackout(parseInt(el.dataset.pickIdx,10)));
+      el.setAttribute("draggable", "true");
+
+      el.addEventListener("dragstart", (e)=>{
+        dragFrom = parseInt(el.dataset.pickIdx, 10);
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", dragFrom);
+        requestAnimationFrame(()=> el.classList.add("drag-src"));
+      });
+
+      el.addEventListener("dragend", ()=>{
+        el.classList.remove("drag-src");
+        boardTable.querySelectorAll(".drag-over").forEach(c=>c.classList.remove("drag-over"));
+        dragFrom = null;
+      });
+
+      el.addEventListener("dragover", (e)=>{
+        if(dragFrom === null) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        boardTable.querySelectorAll(".drag-over").forEach(c=>c.classList.remove("drag-over"));
+        el.classList.add("drag-over");
+      });
+
+      el.addEventListener("dragleave", ()=> el.classList.remove("drag-over"));
+
+      el.addEventListener("drop", (e)=>{
+        e.preventDefault();
+        el.classList.remove("drag-over");
+        const to = parseInt(el.dataset.pickIdx, 10);
+        if(dragFrom !== null && dragFrom !== to) reorderPick(dragFrom, to);
+      });
+
+      el.addEventListener("click", ()=>{
+        if(dragFrom !== null) return;
+        toggleBlackout(parseInt(el.dataset.pickIdx, 10));
+      });
     });
     boardTable.querySelectorAll('input[data-team]').forEach(inp=>{
       inp.addEventListener("change", ()=>{
