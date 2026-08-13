@@ -416,8 +416,18 @@
   .cell.filled[draggable="true"]{ cursor:grab; }
   .cell.filled[draggable="true"]:active{ cursor:grabbing; }
   .cell.drag-src{ opacity:.35; }
-  .cell.drop-before{ box-shadow: inset 3px 0 0 0 var(--accent) !important; }
-  .cell.drop-after { box-shadow: inset -3px 0 0 0 var(--accent) !important; }
+  .cell.drop-before::before,
+  .cell.drop-after::after{
+    content:'';
+    position:absolute;
+    top:0; bottom:0;
+    width:3px;
+    background:var(--accent);
+    z-index:5;
+    pointer-events:none;
+  }
+  .cell.drop-before::before{ left:0; }
+  .cell.drop-after::after { right:0; }
 
   /* ---------- context menu ---------- */
   .ctx-menu{
@@ -748,6 +758,11 @@ Justin Jefferson, WR, MIN, 6"></textarea>
         if(e.target.closest(".flag-btn")) return;
         draftPlayer(p.id);
       });
+      tile.addEventListener("contextmenu", (e)=>{
+        e.preventDefault();
+        e.stopPropagation();
+        openCtxMenu(e.clientX, e.clientY, p.id);
+      });
       tile.querySelector('[data-act="target"]').addEventListener("click", (e)=>{
         e.stopPropagation();
         toggleFlag("targets", p.id);
@@ -1054,13 +1069,6 @@ Justin Jefferson, WR, MIN, 6"></textarea>
   }
 
   function closeCtxMenu(){ ctxMenu.classList.remove("open"); ctxPlayerId = null; }
-
-  poolList.addEventListener("contextmenu", (e)=>{
-    const tile = e.target.closest(".player-tile");
-    if(!tile) return;
-    e.preventDefault();
-    openCtxMenu(e.clientX, e.clientY, tile.dataset.pid);
-  });
 
   ctxStar.addEventListener("click", ()=>{
     if(ctxPlayerId) toggleFlag("targets", ctxPlayerId);
