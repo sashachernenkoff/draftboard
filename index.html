@@ -269,6 +269,10 @@
 
   .player-tile.is-target{ box-shadow: inset 3px 0 0 var(--target); }
   .player-tile.is-dnd{ box-shadow: inset 3px 0 0 var(--dnd); opacity:.55; }
+  .player-tile[draggable="true"]{ cursor:grab; }
+  .player-tile.pool-drag-src{ opacity:.35; }
+  .player-tile.pool-drop-before{ box-shadow: 0 -2px 0 var(--accent); }
+  .player-tile.pool-drop-after { box-shadow: 0 2px 0 var(--accent); }
 
   .pool-empty{
     padding:30px 18px;
@@ -571,6 +575,7 @@
         <input type="file" id="csvFile" accept=".csv,text/csv" style="display:none;">
       </label>
       <button id="pasteBtn">Paste list</button>
+      <button id="sleeperBtn">Load Sleeper list</button>
       <button id="resetBtn" class="ghost">Reset draft</button>
     </div>
   </header>
@@ -588,6 +593,7 @@
           <button class="pos-tab" data-pos="TE">TE</button>
           <button class="pos-tab" data-pos="DEF">DEF</button>
           <button class="pos-tab" data-pos="K">K</button>
+          <button class="pos-tab" data-pos="DRAFTED">Drafted</button>
         </div>
       </div>
       <div class="pool-count" id="poolCount">— players available</div>
@@ -637,6 +643,8 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
 </div>
 
 <div class="ctx-menu" id="ctxMenu">
+  <div class="ctx-item" id="ctxDraft"></div>
+  <div class="ctx-sep"></div>
   <div class="ctx-item" id="ctxStar"></div>
   <div class="ctx-item" id="ctxDnd"></div>
   <div class="ctx-sep"></div>
@@ -719,6 +727,9 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
   const pickStatus = document.getElementById("pickStatus");
 
   let activePos = "ALL";
+  let poolDragId = null;
+  let poolDropBeforeId = null;
+  let poolDropAfterId  = null;
 
   function styleFor(pos){ return POS_STYLE[pos] || POS_STYLE.FA; }
 
@@ -786,6 +797,54 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
         e.stopPropagation();
         toggleFlag("dnds", p.id);
       });
+
+      // pool drag-to-rerank
+      tile.setAttribute("draggable", "true");
+      tile.addEventListener("dragstart", (e)=>{
+        poolDragId = p.id;
+        e.dataTransfer.effectAllowed = "move";
+        requestAnimationFrame(()=> tile.classList.add("pool-drag-src"));
+      });
+      tile.addEventListener("dragend", ()=>{
+        tile.classList.remove("pool-drag-src");
+        poolList.querySelectorAll(".pool-drop-before,.pool-drop-after").forEach(t=>t.classList.remove("pool-drop-before","pool-drop-after"));
+        poolDragId = null;
+        poolDropBeforeId = null;
+      });
+      tile.addEventListener("dragover", (e)=>{
+        if(!poolDragId || poolDragId === p.id) return;
+        e.preventDefault();
+        poolList.querySelectorAll(".pool-drop-before,.pool-drop-after").forEach(t=>t.classList.remove("pool-drop-before","pool-drop-after"));
+        const rect = tile.getBoundingClientRect();
+        const isTop = (e.clientY - rect.top) < rect.height / 2;
+        tile.classList.add(isTop ? "pool-drop-before" : "pool-drop-after");
+        poolDropBeforeId = isTop ? p.id : null;
+        poolDropAfterId  = isTop ? null : p.id;
+      });
+      tile.addEventListener("drop", (e)=>{
+        e.preventDefault();
+        poolList.querySelectorAll(".pool-drop-before,.pool-drop-after").forEach(t=>t.classList.remove("pool-drop-before","pool-drop-after"));
+        if(!poolDragId || poolDragId === p.id) return;
+        const isTop = tile.classList.contains("pool-drop-before") || (e.clientY - tile.getBoundingClientRect().top) < tile.getBoundingClientRect().height / 2;
+        const insertBeforeId = isTop ? p.id : null;
+        const insertAfterId  = isTop ? null : p.id;
+        if(insertBeforeId){
+          reorderPlayerInsertBefore(poolDragId, insertBeforeId);
+        } else {
+          // insert after: find next sibling in full player list
+          const afterIdx = state.players.findIndex(pl=>pl.id===insertAfterId);
+          const next = state.players[afterIdx+1];
+          if(next) reorderPlayerInsertBefore(poolDragId, next.id);
+          else {
+            // move to end
+            const fromIdx = state.players.findIndex(pl=>pl.id===poolDragId);
+            const [player] = state.players.splice(fromIdx, 1);
+            state.players.push(player);
+            saveState(); renderPool();
+          }
+        }
+      });
+
       poolList.appendChild(tile);
     });
   }
@@ -819,6 +878,17 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
     renderAll();
     const p = playerById(removed.playerId);
     showToast((p?p.name:"Pick") + " returned to the pool");
+  }
+
+  function reorderPlayerInsertBefore(fromId, insertBeforeId){
+    const fromIdx = state.players.findIndex(p=>p.id===fromId);
+    const toIdx   = state.players.findIndex(p=>p.id===insertBeforeId);
+    if(fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+    const [player] = state.players.splice(fromIdx, 1);
+    const adjusted = toIdx > fromIdx ? toIdx - 1 : toIdx;
+    state.players.splice(adjusted, 0, player);
+    saveState();
+    renderPool();
   }
 
   function reorderPickInsertBefore(from, insertBefore){
@@ -1211,8 +1281,9 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
 
   // ---- right-click context menu ----
   const ctxMenu = document.getElementById("ctxMenu");
-  const ctxStar = document.getElementById("ctxStar");
-  const ctxDnd  = document.getElementById("ctxDnd");
+  const ctxDraft = document.getElementById("ctxDraft");
+  const ctxStar  = document.getElementById("ctxStar");
+  const ctxDnd   = document.getElementById("ctxDnd");
   const ctxRemove = document.getElementById("ctxRemove");
   let ctxPlayerId = null;
   let ctxContext  = 'pool'; // 'pool' | 'board'
@@ -1223,9 +1294,11 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
     ctxContext  = context || 'pool';
     const isTarget = !!state.targets[playerId];
     const isDnd    = !!state.dnds[playerId];
+    ctxDraft.textContent  = ctxContext === 'board' ? "Return to pool" : "Draft player";
     ctxStar.textContent   = isTarget ? "★ Remove target"       : "★ Add target";
     ctxDnd.textContent    = isDnd    ? "✕ Remove do-not-draft"  : "✕ Do not draft";
-    ctxRemove.textContent = ctxContext === 'board' ? "Return to pool" : "Remove player";
+    ctxRemove.style.display = ctxContext === 'board' ? "none" : "";
+    ctxRemove.textContent = "Remove player";
 
     ctxMenu.style.left = x + "px";
     ctxMenu.style.top  = y + "px";
@@ -1241,6 +1314,18 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
 
   function closeCtxMenu(){ ctxMenu.classList.remove("open"); ctxPlayerId = null; }
 
+  ctxDraft.addEventListener("click", ()=>{
+    if(!ctxPlayerId){ closeCtxMenu(); return; }
+    if(ctxContext === 'board'){
+      state.picks = state.picks.filter(p=>p.playerId !== ctxPlayerId);
+      saveState(); renderAll();
+      closeCtxMenu();
+      showToast("Player returned to pool");
+    } else {
+      draftPlayer(ctxPlayerId);
+      closeCtxMenu();
+    }
+  });
   ctxStar.addEventListener("click", ()=>{
     if(ctxPlayerId) toggleFlag("targets", ctxPlayerId);
     closeCtxMenu();
@@ -1252,24 +1337,14 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
   ctxRemove.addEventListener("click", ()=>{
     if(!ctxPlayerId){ closeCtxMenu(); return; }
     const id = ctxPlayerId;
-    if(ctxContext === 'board'){
-      // un-draft: remove only the pick, player returns to pool
-      state.picks = state.picks.filter(p=>p.playerId!==id);
-      saveState();
-      renderAll();
-      closeCtxMenu();
-      showToast("Player returned to pool");
-    } else {
-      // pool: remove player from the list entirely
-      state.players = state.players.filter(p=>p.id!==id);
-      state.picks   = state.picks.filter(p=>p.playerId!==id);
-      delete state.targets[id];
-      delete state.dnds[id];
-      saveState();
-      renderAll();
-      closeCtxMenu();
-      showToast("Player removed");
-    }
+    state.players = state.players.filter(p=>p.id!==id);
+    state.picks   = state.picks.filter(p=>p.playerId!==id);
+    delete state.targets[id];
+    delete state.dnds[id];
+    saveState();
+    renderAll();
+    closeCtxMenu();
+    showToast("Player removed");
   });
 
   document.addEventListener("click", (e)=>{
@@ -1277,6 +1352,15 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
     if(!ctxMenu.contains(e.target)) closeCtxMenu();
   });
   document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeCtxMenu(); });
+
+  document.getElementById("sleeperBtn").addEventListener("click", ()=>{
+    if(!confirm("Load the full Sleeper player list? This replaces your current pool and clears all picks.")) return;
+    state.isDefaultList = true;
+    state.picks = [];
+    state.targets = {};
+    state.dnds = {};
+    loadSleeperPool();
+  });
 
   document.getElementById("resetBtn").addEventListener("click", ()=>{
     if(!confirm("Reset the draft? This clears all picks but keeps your player list and target/DND flags.")) return;
