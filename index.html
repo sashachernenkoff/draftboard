@@ -408,10 +408,12 @@
     font-family:"JetBrains Mono", monospace;
     opacity:.6;
   }
-  .cell .flag-bar{
+  .cell .flag-corner{
     position:absolute;
-    top:0; left:0; bottom:0;
-    width:4px;
+    top:0; left:0;
+    width:18px; height:18px;
+    clip-path: polygon(0 0, 100% 0, 0 100%);
+    z-index:2;
   }
   .cell.filled[draggable="true"]{ cursor:grab; }
   .cell.filled[draggable="true"]:active{ cursor:grabbing; }
@@ -860,8 +862,8 @@ Justin Jefferson, WR, MIN, 6"></textarea>
           const pick = drafted[idx];
           const p = playerById(pick.playerId);
           const sty = styleFor(p ? p.pos : "FA");
-          const flagBar = state.targets[pick.playerId] ? `<span class="flag-bar" style="background:var(--target)"></span>`
-                        : state.dnds[pick.playerId] ? `<span class="flag-bar" style="background:var(--dnd)"></span>` : "";
+          const flagBar = state.targets[pick.playerId] ? `<span class="flag-corner" style="background:var(--target)"></span>`
+                        : state.dnds[pick.playerId] ? `<span class="flag-corner" style="background:var(--dnd)"></span>` : "";
           html += `<td><div class="cell filled${pick.blacked?' blacked':''}" data-pick-idx="${idx}" style="--fill:${sty.fill}; --ink:${sty.ink};">
             <span class="pickno">#${idx+1}</span>
             ${flagBar}
