@@ -355,7 +355,7 @@
 
   .cell{
     width:100%;
-    height:60px;
+    height:68px;
     border-radius:8px;
     border:1px solid var(--line);
     position:relative;
@@ -400,10 +400,18 @@
     font-size:10px;
     font-weight:600;
     font-family:"JetBrains Mono", monospace;
-    margin-top:3px;
+    margin-top:2px;
     opacity:.85;
     overflow:hidden;
     text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .cell .cbye{
+    font-size:9px;
+    font-weight:600;
+    font-family:"JetBrains Mono", monospace;
+    margin-top:1px;
+    opacity:.6;
     white-space:nowrap;
   }
   .cell .pickno{
@@ -875,7 +883,8 @@ Justin Jefferson, WR, MIN, 6"></textarea>
             ${flagBar}
             <div class="inner">
               <div class="cname">${p?escapeHtml(p.name):"—"}</div>
-              <div class="cmeta">${p?p.pos:""}${p&&p.team?(" · "+p.team):""}${p&&p.bye?(" · BYE "+p.bye):""}</div>
+              <div class="cmeta">${p?p.pos:""}${p&&p.team?(" · "+p.team):""}</div>
+              ${p&&p.bye?`<div class="cbye">BYE ${p.bye}</div>`:""}
             </div>
           </div></td>`;
         }
