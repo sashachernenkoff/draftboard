@@ -826,24 +826,35 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
         e.preventDefault();
         poolList.querySelectorAll(".pool-drop-before,.pool-drop-after").forEach(t=>t.classList.remove("pool-drop-before","pool-drop-after"));
         if(!poolDragId || poolDragId === p.id) return;
-        const isTop = tile.classList.contains("pool-drop-before") || (e.clientY - tile.getBoundingClientRect().top) < tile.getBoundingClientRect().height / 2;
-        const insertBeforeId = isTop ? p.id : null;
-        const insertAfterId  = isTop ? null : p.id;
-        if(insertBeforeId){
-          reorderPlayerInsertBefore(poolDragId, insertBeforeId);
-        } else {
-          // insert after: find next sibling in full player list
-          const afterIdx = state.players.findIndex(pl=>pl.id===insertAfterId);
-          const next = state.players[afterIdx+1];
-          if(next) reorderPlayerInsertBefore(poolDragId, next.id);
-          else {
-            // move to end
-            const fromIdx = state.players.findIndex(pl=>pl.id===poolDragId);
-            const [player] = state.players.splice(fromIdx, 1);
-            state.players.push(player);
-            saveState(); renderPool();
-          }
+
+        const draggedTile = poolList.querySelector(`[data-pid="${poolDragId}"]`);
+        if(!draggedTile) return;
+
+        const rect = tile.getBoundingClientRect();
+        const isTop = (e.clientY - rect.top) < rect.height / 2;
+
+        // Move DOM node directly — no re-render
+        if(isTop) poolList.insertBefore(draggedTile, tile);
+        else tile.after(draggedTile);
+
+        // Update state.players to match new order
+        const fromIdx = state.players.findIndex(pl=>pl.id===poolDragId);
+        const refIdx  = state.players.findIndex(pl=>pl.id===p.id);
+        if(fromIdx !== -1 && refIdx !== -1){
+          const [player] = state.players.splice(fromIdx, 1);
+          const insertAt = isTop ? refIdx : refIdx + 1;
+          state.players.splice(insertAt > fromIdx ? insertAt - 1 : insertAt, 0, player);
         }
+
+        // Refresh rank numbers only (cheap text update)
+        poolList.querySelectorAll(".player-tile").forEach(t=>{
+          const rankEl = t.querySelector(".rank");
+          if(!rankEl) return;
+          const idx = state.players.findIndex(pl=>pl.id===t.dataset.pid);
+          if(idx !== -1) rankEl.textContent = idx + 1;
+        });
+
+        saveState();
       });
 
       poolList.appendChild(tile);
@@ -881,18 +892,7 @@ Justin Jefferson, WR, MIN, 6, 0, 1"></textarea>
     showToast((p?p.name:"Pick") + " returned to the pool");
   }
 
-  function reorderPlayerInsertBefore(fromId, insertBeforeId){
-    const fromIdx = state.players.findIndex(p=>p.id===fromId);
-    const toIdx   = state.players.findIndex(p=>p.id===insertBeforeId);
-    if(fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
-    const [player] = state.players.splice(fromIdx, 1);
-    const adjusted = toIdx > fromIdx ? toIdx - 1 : toIdx;
-    state.players.splice(adjusted, 0, player);
-    saveState();
-    renderPool();
-  }
-
-  function reorderPickInsertBefore(from, insertBefore){
+function reorderPickInsertBefore(from, insertBefore){
     const [pick] = state.picks.splice(from, 1);
     const at = insertBefore > from ? insertBefore - 1 : insertBefore;
     state.picks.splice(at, 0, pick);
