@@ -415,19 +415,22 @@
   }
   .cell.filled[draggable="true"]{ cursor:grab; }
   .cell.filled[draggable="true"]:active{ cursor:grabbing; }
+  .cell.filled{ transition: transform 0.12s ease; }
   .cell.drag-src{ opacity:.35; }
-  .cell.drop-before::before,
-  .cell.drop-after::after{
-    content:'';
-    position:absolute;
-    top:0; bottom:0;
-    width:3px;
+  .cell.push-next{ transform: translateX(7px); }
+
+  .drop-line{
+    position:fixed;
+    width:2px;
+    transform:translateX(-50%);
+    border-radius:2px;
     background:var(--accent);
-    z-index:5;
+    box-shadow:0 0 10px 4px var(--accent);
     pointer-events:none;
+    display:none;
+    z-index:999;
   }
-  .cell.drop-before::before{ left:0; }
-  .cell.drop-after::after { right:0; }
+  .drop-line.active{ display:block; }
 
   /* ---------- context menu ---------- */
   .ctx-menu{
@@ -625,6 +628,7 @@ Justin Jefferson, WR, MIN, 6"></textarea>
   <div class="ctx-item ctx-danger" id="ctxRemove">Remove player</div>
 </div>
 
+<div class="drop-line" id="dropLine"></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -755,7 +759,7 @@ Justin Jefferson, WR, MIN, 6"></textarea>
         </span>
       `;
       tile.addEventListener("click", (e)=>{
-        if(e.target.closest(".flag-btn")) return;
+        if(e.ctrlKey || e.target.closest(".flag-btn")) return;
         draftPlayer(p.id);
       });
       tile.addEventListener("contextmenu", (e)=>{
@@ -874,12 +878,13 @@ Justin Jefferson, WR, MIN, 6"></textarea>
     boardTable.innerHTML = html;
 
     // wire up cell interactions (click to blackout, drag-and-drop to reorder)
+    const dropLine = document.getElementById("dropLine");
     let dragFrom = null;
+    let dragInsertBefore = null;
 
-    function clearDropIndicators(){
-      boardTable.querySelectorAll(".drop-before,.drop-after").forEach(c=>{
-        c.classList.remove("drop-before","drop-after");
-      });
+    function clearDragUI(){
+      dropLine.classList.remove("active");
+      boardTable.querySelectorAll(".push-next").forEach(c=>c.classList.remove("push-next"));
     }
 
     boardTable.querySelectorAll(".cell.filled").forEach(el=>{
@@ -887,45 +892,56 @@ Justin Jefferson, WR, MIN, 6"></textarea>
 
       el.addEventListener("dragstart", (e)=>{
         dragFrom = parseInt(el.dataset.pickIdx, 10);
+        dragInsertBefore = null;
         e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", dragFrom);
+        e.dataTransfer.setData("text/plain", String(dragFrom));
         requestAnimationFrame(()=> el.classList.add("drag-src"));
       });
 
       el.addEventListener("dragend", ()=>{
         el.classList.remove("drag-src");
-        clearDropIndicators();
+        clearDragUI();
         dragFrom = null;
+        dragInsertBefore = null;
       });
 
       el.addEventListener("dragover", (e)=>{
         if(dragFrom === null) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        clearDropIndicators();
+
         const rect = el.getBoundingClientRect();
         const isLeftHalf = (e.clientX - rect.left) < rect.width / 2;
-        el.classList.add(isLeftHalf ? "drop-before" : "drop-after");
-      });
+        const cellIdx = parseInt(el.dataset.pickIdx, 10);
+        dragInsertBefore = isLeftHalf ? cellIdx : cellIdx + 1;
 
-      el.addEventListener("dragleave", (e)=>{
-        // only clear if leaving into a non-descendant
-        if(!el.contains(e.relatedTarget)) el.classList.remove("drop-before","drop-after");
+        // position drop line in the gap between cells
+        const lineX = isLeftHalf ? rect.left - 2.5 : rect.right + 2.5;
+        dropLine.style.left   = lineX + "px";
+        dropLine.style.top    = rect.top + "px";
+        dropLine.style.height = rect.height + "px";
+        dropLine.classList.add("active");
+
+        // push the cell that will shift to make room
+        boardTable.querySelectorAll(".push-next").forEach(c=>c.classList.remove("push-next"));
+        const pushIdx = dragInsertBefore;
+        if(pushIdx !== dragFrom && pushIdx !== dragFrom + 1){
+          const pushCell = boardTable.querySelector(`.cell[data-pick-idx="${pushIdx}"]`);
+          if(pushCell) pushCell.classList.add("push-next");
+        }
       });
 
       el.addEventListener("drop", (e)=>{
         e.preventDefault();
-        const isBefore = el.classList.contains("drop-before");
-        clearDropIndicators();
-        const cellIdx = parseInt(el.dataset.pickIdx, 10);
-        const insertBefore = isBefore ? cellIdx : cellIdx + 1;
-        if(dragFrom !== null && insertBefore !== dragFrom && insertBefore !== dragFrom + 1){
-          reorderPickInsertBefore(dragFrom, insertBefore);
+        clearDragUI();
+        if(dragFrom !== null && dragInsertBefore !== null &&
+           dragInsertBefore !== dragFrom && dragInsertBefore !== dragFrom + 1){
+          reorderPickInsertBefore(dragFrom, dragInsertBefore);
         }
       });
 
-      el.addEventListener("click", ()=>{
-        if(dragFrom !== null) return;
+      el.addEventListener("click", (e)=>{
+        if(e.ctrlKey || dragFrom !== null) return;
         toggleBlackout(parseInt(el.dataset.pickIdx, 10));
       });
     });
