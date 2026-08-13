@@ -319,12 +319,14 @@
     border-collapse:separate;
     border-spacing:5px;
     table-layout:fixed;
+    width:100%;
+    min-width:880px;
   }
   table.board th, table.board td{
     padding:0;
   }
   .team-head{
-    min-width:132px;
+    /* width auto-distributes equally via table-layout:fixed */
   }
   .team-head input{
     width:100%;
@@ -352,8 +354,8 @@
   }
 
   .cell{
-    width:132px;
-    height:64px;
+    width:100%;
+    height:60px;
     border-radius:8px;
     border:1px solid var(--line);
     position:relative;
@@ -400,6 +402,9 @@
     font-family:"JetBrains Mono", monospace;
     margin-top:3px;
     opacity:.85;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
   }
   .cell .pickno{
     position:absolute;
