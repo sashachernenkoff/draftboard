@@ -989,14 +989,25 @@ function reorderPickInsertBefore(from, insertBefore){
         const rect = el.getBoundingClientRect();
         const isLeftHalf = (e.clientX - rect.left) < rect.width / 2;
         const cellIdx = parseInt(el.dataset.pickIdx, 10);
-        dragInsertBefore = isLeftHalf ? cellIdx : cellIdx + 1;
+        const round = Math.floor(cellIdx / TEAMS) + 1;
+        const isEvenRow = round % 2 === 0;
+
+        // Even rows run right→left, so left-half of a cell is visually "after" it in pick order
+        dragInsertBefore = (isLeftHalf !== isEvenRow) ? cellIdx : cellIdx + 1;
 
         if(pushPrevEl){ pushPrevEl.classList.remove("push-prev"); pushPrevEl = null; }
         if(pushNextEl){ pushNextEl.classList.remove("push-next"); pushNextEl = null; }
-        const prev = boardTable.querySelector(`.cell[data-pick-idx="${dragInsertBefore - 1}"]`);
-        const next = boardTable.querySelector(`.cell[data-pick-idx="${dragInsertBefore}"]`);
-        if(prev && parseInt(prev.dataset.pickIdx,10) !== dragFrom){ pushPrevEl = prev; prev.classList.add("push-prev"); }
-        if(next && parseInt(next.dataset.pickIdx,10) !== dragFrom){ pushNextEl = next; next.classList.add("push-next"); }
+        const prevCell = boardTable.querySelector(`.cell[data-pick-idx="${dragInsertBefore - 1}"]`);
+        const nextCell = boardTable.querySelector(`.cell[data-pick-idx="${dragInsertBefore}"]`);
+
+        // On even rows lower pickIdx is visually to the right, so swap which cell gets push-prev vs push-next
+        if(isEvenRow){
+          if(prevCell && parseInt(prevCell.dataset.pickIdx,10) !== dragFrom){ pushNextEl = prevCell; prevCell.classList.add("push-next"); }
+          if(nextCell && parseInt(nextCell.dataset.pickIdx,10) !== dragFrom){ pushPrevEl = nextCell; nextCell.classList.add("push-prev"); }
+        } else {
+          if(prevCell && parseInt(prevCell.dataset.pickIdx,10) !== dragFrom){ pushPrevEl = prevCell; prevCell.classList.add("push-prev"); }
+          if(nextCell && parseInt(nextCell.dataset.pickIdx,10) !== dragFrom){ pushNextEl = nextCell; nextCell.classList.add("push-next"); }
+        }
       });
 
       el.addEventListener("drop", (e)=>{
