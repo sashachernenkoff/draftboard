@@ -1388,6 +1388,40 @@ function reorderPickInsertBefore(from, insertBefore){
     showToast("Draft reset");
   });
 
+  // Pool drop catch-all: covers the 3px margin-bottom gaps between tiles
+  poolList.addEventListener("dragover", (e)=>{
+    if(!poolDragId) return;
+    e.preventDefault();
+  });
+  poolList.addEventListener("drop", (e)=>{
+    e.preventDefault();
+    const refTile = poolPushNextEl || (poolPushPrevEl ? poolPushPrevEl.nextElementSibling : null);
+    if(poolPushPrevEl){ poolPushPrevEl.classList.remove("pool-push-prev"); poolPushPrevEl = null; }
+    if(poolPushNextEl){ poolPushNextEl.classList.remove("pool-push-next"); poolPushNextEl = null; }
+    if(!poolDragId || !refTile || refTile.dataset.pid === poolDragId) return;
+
+    const draggedTile = poolList.querySelector(`[data-pid="${poolDragId}"]`);
+    if(!draggedTile) return;
+
+    poolList.insertBefore(draggedTile, refTile);
+
+    const fromIdx = state.players.findIndex(pl=>pl.id===poolDragId);
+    const refIdx  = state.players.findIndex(pl=>pl.id===refTile.dataset.pid);
+    if(fromIdx !== -1 && refIdx !== -1){
+      const [player] = state.players.splice(fromIdx, 1);
+      state.players.splice(refIdx > fromIdx ? refIdx - 1 : refIdx, 0, player);
+    }
+
+    const rankMap = Object.create(null);
+    state.players.forEach((pl, i)=>{ rankMap[pl.id] = i + 1; });
+    poolList.querySelectorAll(".player-tile").forEach(t=>{
+      const r = t.querySelector(".rank");
+      if(r && rankMap[t.dataset.pid]) r.textContent = rankMap[t.dataset.pid];
+    });
+
+    saveState();
+  });
+
   // ---- init ----
   roundsInput.value = state.rounds;
   renderAll();
