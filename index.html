@@ -1031,6 +1031,22 @@ function reorderPickInsertBefore(from, insertBefore){
         toggleBlackout(parseInt(el.dataset.pickIdx, 10));
       });
     });
+
+    // Catch drops that land in the border-spacing gaps between cells
+    boardTable.addEventListener("dragover", (e)=>{
+      if(dragFrom === null) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+    });
+    boardTable.addEventListener("drop", (e)=>{
+      e.preventDefault();
+      clearBoardDragUI();
+      if(dragFrom !== null && dragInsertBefore !== null &&
+         dragInsertBefore !== dragFrom && dragInsertBefore !== dragFrom + 1){
+        reorderPickInsertBefore(dragFrom, dragInsertBefore);
+      }
+    });
+
     boardTable.querySelectorAll('input[data-team]').forEach(inp=>{
       inp.addEventListener("change", ()=>{
         state.teamNames[parseInt(inp.dataset.team,10)] = inp.value || ("Team "+(parseInt(inp.dataset.team,10)+1));
