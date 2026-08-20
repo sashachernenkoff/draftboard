@@ -1119,9 +1119,23 @@ function reorderPickInsertBefore(from, insertBefore){
 
   // ---- Sleeper enrichment ----
   // ---- Sleeper data (unified cache: pool + enrichment map) ----
-  const SLEEPER_KEY = "fftracker_sleeper_v2";
+  const SLEEPER_KEY = "fftracker_sleeper_v3";
   const SLEEPER_TTL = 86400000; // 24 h
   const POS_ORDER   = {QB:1, RB:2, WR:3, TE:4, K:5, DEF:6};
+
+  // Fallback bye weeks for 2026 — Sleeper omits bye_week during preseason
+  const BYE_2026 = {
+    ARI:14, ATL:11, BAL:13, BUF:7,  CAR:5,  CHI:10,
+    CIN:6,  CLE:11, DAL:14, DEN:10, DET:6,  GB:11,
+    HOU:8,  IND:13, JAX:7,  KC:5,   LAC:7,  LAR:11,
+    LV:13,  MIA:6,  MIN:6,  NE:11,  NO:8,   NYG:8,
+    NYJ:13, PHI:10, PIT:9,  SEA:11, SF:8,   TB:10,
+    TEN:9,  WAS:7
+  };
+  function byeFor(sleeperPlayer){
+    if(sleeperPlayer.bye_week != null) return String(sleeperPlayer.bye_week);
+    return BYE_2026[sleeperPlayer.team] != null ? String(BYE_2026[sleeperPlayer.team]) : "";
+  }
 
   function sleeperNorm(s){
     return (s||"").toLowerCase().replace(/[.']/g,"").replace(/\s+/g," ").trim();
@@ -1149,7 +1163,7 @@ function reorderPickInsertBefore(from, insertBefore){
           if(p.position === "DEF") name = p.team + " DEF";
           else return;
         }
-        const bye  = p.bye_week != null ? String(p.bye_week) : "";
+        const bye  = byeFor(p);
         const team = p.team || "";
         const pos  = p.position;
         const mapKey = sleeperNorm(name);
